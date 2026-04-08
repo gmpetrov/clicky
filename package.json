@@ -6,7 +6,7 @@
   "description": "Clicky is an AI teacher that lives as a buddy next to your cursor.",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
