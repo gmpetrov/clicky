@@ -1,0 +1,169 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                  String               @id
+  name                String
+  email               String
+  emailVerified       Boolean              @default(false)
+  image               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  stripeCustomerId    String?
+  sessions            Session[]
+  accounts            Account[]
+  usageEvents         UsageEvent[]
+  usagePeriodSummaries UsagePeriodSummary[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model DeviceCode {
+  id              String    @id
+  deviceCode      String
+  userCode        String
+  userId          String?
+  expiresAt       DateTime
+  status          String
+  lastPolledAt    DateTime?
+  pollingInterval Int?
+  clientId        String?
+  scope           String?
+
+  @@map("deviceCode")
+}
+
+model Subscription {
+  id                   String    @id
+  plan                 String
+  referenceId          String
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  status               String?   @default("incomplete")
+  periodStart          DateTime?
+  periodEnd            DateTime?
+  trialStart           DateTime?
+  trialEnd             DateTime?
+  cancelAtPeriodEnd    Boolean?  @default(false)
+  cancelAt             DateTime?
+  canceledAt           DateTime?
+  endedAt              DateTime?
+  seats                Int?
+  billingInterval      String?
+  stripeScheduleId     String?
+
+  @@map("subscription")
+}
+
+model UsageEvent {
+  id                       String   @id @default(cuid())
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId           String?
+  billingPeriodKey         String?
+  periodStart              DateTime?
+  periodEnd                DateTime?
+  provider                 String
+  operation                String
+  model                    String?
+  externalRequestId        String?
+  idempotencyKey           String   @unique
+  requestStartedAt         DateTime?
+  requestCompletedAt       DateTime
+  promptTokens             Int?
+  completionTokens         Int?
+  totalTokens              Int?
+  cachedTokens             Int?
+  textCharacters           Int?
+  audioDurationMilliseconds Int?
+  computedCostMicros       BigInt
+  costSource               String
+  rawUsagePayload          Json
+  createdAt                DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([billingPeriodKey])
+  @@index([subscriptionId, createdAt])
+  @@map("usageEvent")
+}
+
+model UsagePeriodSummary {
+  id                   String   @id @default(cuid())
+  billingPeriodKey     String   @unique
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId       String?
+  periodStart          DateTime
+  periodEnd            DateTime
+  totalCostMicros      BigInt   @default(0)
+  openrouterCostMicros BigInt   @default(0)
+  elevenLabsCostMicros BigInt   @default(0)
+  assemblyAICostMicros BigInt   @default(0)
+  openrouterEventCount Int      @default(0)
+  elevenLabsEventCount Int      @default(0)
+  assemblyAIEventCount Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([userId, periodEnd])
+  @@map("usagePeriodSummary")
+}

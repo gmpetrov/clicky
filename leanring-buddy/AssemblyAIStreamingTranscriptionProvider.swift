@@ -19,7 +19,11 @@ struct AssemblyAIStreamingTranscriptionProviderError: LocalizedError {
 final class AssemblyAIStreamingTranscriptionProvider: BuddyTranscriptionProvider {
     /// URL for the Cloudflare Worker endpoint that returns a short-lived
     /// AssemblyAI streaming token. The real API key never leaves the server.
-    private static let tokenProxyURL = "https://your-worker-name.your-subdomain.workers.dev/transcribe-token"
+    private static var tokenProxyURL: String {
+        let workerBaseURL = AppBundleConfiguration.stringValue(forKey: "ClickyWorkerBaseURL")
+            ?? "http://localhost:8787"
+        return "\(workerBaseURL)/transcribe-token"
+    }
 
     let displayName = "AssemblyAI"
     let requiresSpeechRecognitionPermission = false
@@ -39,13 +43,16 @@ final class AssemblyAIStreamingTranscriptionProvider: BuddyTranscriptionProvider
         onFinalTranscriptReady: @escaping (String) -> Void,
         onError: @escaping (Error) -> Void
     ) async throws -> any BuddyStreamingTranscriptionSession {
-        // Fetch a fresh temporary token from the proxy before each session
-        let temporaryToken = try await fetchTemporaryToken()
-        print("🎙️ AssemblyAI: fetched temporary token (\(temporaryToken.prefix(20))...)")
-
         let session = AssemblyAIStreamingTranscriptionSession(
-            apiKey: nil,
-            temporaryToken: temporaryToken,
+            temporaryTokenProvider: { [weak self] in
+                guard let self else {
+                    throw AssemblyAIStreamingTranscriptionProviderError(
+                        message: "AssemblyAI token provider is no longer available."
+                    )
+                }
+
+                return try await self.fetchTemporaryToken()
+            },
             urlSession: sharedWebSocketURLSession,
             keyterms: keyterms,
             onTranscriptUpdate: onTranscriptUpdate,
@@ -53,7 +60,7 @@ final class AssemblyAIStreamingTranscriptionProvider: BuddyTranscriptionProvider
             onError: onError
         )
 
-        try await session.open()
+        session.startConnecting()
         return session
     }
 
@@ -61,6 +68,9 @@ final class AssemblyAIStreamingTranscriptionProvider: BuddyTranscriptionProvider
     private func fetchTemporaryToken() async throws -> String {
         var request = URLRequest(url: URL(string: Self.tokenProxyURL)!)
         request.httpMethod = "POST"
+        if let authorizationHeaderValue = ClickyDesktopSessionStore.authorizationHeaderValue() {
+            request.setValue(authorizationHeaderValue, forHTTPHeaderField: "Authorization")
+        }
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -68,6 +78,12 @@ final class AssemblyAIStreamingTranscriptionProvider: BuddyTranscriptionProvider
               (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let body = String(data: data, encoding: .utf8) ?? "unknown"
+            if statusCode == 404 {
+                throw AssemblyAIStreamingTranscriptionProviderError(
+                    message: "Failed to fetch AssemblyAI token from \(Self.tokenProxyURL) (HTTP 404). This usually means ClickyWorkerBaseURL is pointing at the wrong local server or the Worker is not running on that port."
+                )
+            }
+
             throw AssemblyAIStreamingTranscriptionProviderError(
                 message: "Failed to fetch AssemblyAI token (HTTP \(statusCode)): \(body)"
             )
@@ -103,6 +119,12 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
         let message: String?
     }
 
+    private struct TerminationMessage: Decodable {
+        let type: String
+        let session_duration_seconds: Double?
+        let audio_duration_seconds: Double?
+    }
+
     private struct StoredTurnTranscript {
         var transcriptText: String
         var isFormatted: Bool
@@ -110,12 +132,15 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
 
     private static let websocketBaseURLString = "wss://streaming.assemblyai.com/v3/ws"
     private static let targetSampleRate = 16_000.0
-    private static let explicitFinalTranscriptGracePeriodSeconds = 1.4
+    private static let explicitFinalTranscriptGracePeriodSeconds = 2.2
+    private static let forceEndpointDelaySeconds = 0.35
+    private static let minTurnSilenceMilliseconds = 250
+    private static let maxTurnSilenceMilliseconds = 2_000
+    private static let maximumBufferedAudioChunkCount = 40
 
     let finalTranscriptFallbackDelaySeconds: TimeInterval = 2.8
 
-    private let apiKey: String?
-    private let temporaryToken: String?
+    private let temporaryTokenProvider: @Sendable () async throws -> String
     private let keyterms: [String]
     private let onTranscriptUpdate: (String) -> Void
     private let onFinalTranscriptReady: (String) -> Void
@@ -127,27 +152,31 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
     private let urlSession: URLSession
 
     private var webSocketTask: URLSessionWebSocketTask?
-    private var readyContinuation: CheckedContinuation<Void, Error>?
-    private var hasResolvedReadyContinuation = false
+    private var connectionTask: Task<Void, Never>?
     private var hasDeliveredFinalTranscript = false
     private var isAwaitingExplicitFinalTranscript = false
+    private var isCancelled = false
     private var latestTranscriptText = ""
     private var activeTurnOrder: Int?
     private var activeTurnTranscriptText = ""
     private var storedTurnTranscriptsByOrder: [Int: StoredTurnTranscript] = [:]
     private var explicitFinalTranscriptDeadlineWorkItem: DispatchWorkItem?
+    private var pendingAudioChunks: [Data] = []
+    private var pendingControlMessages: [String] = []
+    private var isSocketReady = false
+    private var hasReportedMeteredUsage = false
+    private let meteringSessionIdentifier = UUID().uuidString
+    private let requestStartedAt = Date()
 
     init(
-        apiKey: String?,
-        temporaryToken: String?,
+        temporaryTokenProvider: @escaping @Sendable () async throws -> String,
         urlSession: URLSession,
         keyterms: [String],
         onTranscriptUpdate: @escaping (String) -> Void,
         onFinalTranscriptReady: @escaping (String) -> Void,
         onError: @escaping (Error) -> Void
     ) {
-        self.apiKey = apiKey
-        self.temporaryToken = temporaryToken
+        self.temporaryTokenProvider = temporaryTokenProvider
         self.urlSession = urlSession
         self.keyterms = keyterms
         self.onTranscriptUpdate = onTranscriptUpdate
@@ -155,26 +184,29 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
         self.onError = onError
     }
 
-    func open() async throws {
-        let websocketURL = try Self.makeWebsocketURL(
-            temporaryToken: temporaryToken,
-            keyterms: keyterms
-        )
+    func startConnecting() {
+        connectionTask?.cancel()
+        connectionTask = Task { [weak self] in
+            guard let self else { return }
 
-        var websocketRequest = URLRequest(url: websocketURL)
-        if let apiKey {
-            websocketRequest.setValue(apiKey, forHTTPHeaderField: "Authorization")
-        }
+            do {
+                let temporaryToken = try await temporaryTokenProvider()
+                guard !Task.isCancelled else { return }
+                print("🎙️ AssemblyAI: fetched temporary token (\(temporaryToken.prefix(20))...)")
 
-        let webSocketTask = urlSession.webSocketTask(with: websocketRequest)
-        self.webSocketTask = webSocketTask
-        webSocketTask.resume()
+                let websocketURL = try Self.makeWebsocketURL(
+                    temporaryToken: temporaryToken,
+                    keyterms: keyterms
+                )
 
-        receiveNextMessage()
-
-        try await withCheckedThrowingContinuation { continuation in
-            stateQueue.async {
-                self.readyContinuation = continuation
+                let websocketRequest = URLRequest(url: websocketURL)
+                let webSocketTask = urlSession.webSocketTask(with: websocketRequest)
+                self.webSocketTask = webSocketTask
+                webSocketTask.resume()
+                self.receiveNextMessage()
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.failSession(with: error)
             }
         }
     }
@@ -186,7 +218,18 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
         }
 
         sendQueue.async { [weak self] in
-            guard let self, let webSocketTask = self.webSocketTask else { return }
+            guard let self, !self.isCancelled else { return }
+
+            guard self.isSocketReady, let webSocketTask = self.webSocketTask else {
+                self.pendingAudioChunks.append(audioPCM16Data)
+                if self.pendingAudioChunks.count > Self.maximumBufferedAudioChunkCount {
+                    self.pendingAudioChunks.removeFirst(
+                        self.pendingAudioChunks.count - Self.maximumBufferedAudioChunkCount
+                    )
+                }
+                return
+            }
+
             webSocketTask.send(.data(audioPCM16Data)) { [weak self] error in
                 if let error {
                     self?.failSession(with: error)
@@ -202,7 +245,10 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
             self.scheduleExplicitFinalTranscriptDeadline()
         }
 
-        sendJSONMessage(["type": "ForceEndpoint"])
+        sendJSONMessage(
+            ["type": "ForceEndpoint"],
+            delaySeconds: Self.forceEndpointDelaySeconds
+        )
     }
 
     func cancel() {
@@ -211,6 +257,13 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
             self.explicitFinalTranscriptDeadlineWorkItem = nil
         }
 
+        sendQueue.async { [weak self] in
+            self?.isCancelled = true
+            self?.pendingAudioChunks.removeAll(keepingCapacity: false)
+            self?.pendingControlMessages.removeAll(keepingCapacity: false)
+        }
+
+        connectionTask?.cancel()
         sendJSONMessage(["type": "Terminate"])
         webSocketTask?.cancel(with: .goingAway, reason: nil)
     }
@@ -247,17 +300,13 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
 
             switch envelope.type.lowercased() {
             case "begin":
-                resolveReadyContinuationIfNeeded(with: .success(()))
+                handleSocketReady()
             case "turn":
                 let turnMessage = try JSONDecoder().decode(TurnMessage.self, from: messageData)
                 handleTurnMessage(turnMessage)
             case "termination":
-                resolveReadyContinuationIfNeeded(with: .success(()))
-                stateQueue.async {
-                    if self.isAwaitingExplicitFinalTranscript && !self.hasDeliveredFinalTranscript {
-                        self.deliverFinalTranscriptIfNeeded(self.bestAvailableTranscriptText())
-                    }
-                }
+                let terminationMessage = try JSONDecoder().decode(TerminationMessage.self, from: messageData)
+                handleTerminationMessage(terminationMessage)
             case "error":
                 let errorMessage = try JSONDecoder().decode(ErrorMessage.self, from: messageData)
                 let messageText = errorMessage.error ?? errorMessage.message ?? "AssemblyAI returned an error."
@@ -304,6 +353,30 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
             if turnMessage.end_of_turn == true || turnMessage.turn_is_formatted == true {
                 self.explicitFinalTranscriptDeadlineWorkItem?.cancel()
                 self.explicitFinalTranscriptDeadlineWorkItem = nil
+                self.deliverFinalTranscriptIfNeeded(self.bestAvailableTranscriptText())
+            }
+        }
+    }
+
+    private func handleTerminationMessage(_ terminationMessage: TerminationMessage) {
+        stateQueue.async {
+            let billedSessionDurationSeconds =
+                terminationMessage.session_duration_seconds ?? terminationMessage.audio_duration_seconds
+
+            if let billedSessionDurationSeconds,
+               billedSessionDurationSeconds > 0,
+               !self.hasReportedMeteredUsage {
+                self.hasReportedMeteredUsage = true
+
+                ClickyUsageMeteringClient.shared.reportAssemblyAIStreamingUsage(
+                    sessionIdentifier: self.meteringSessionIdentifier,
+                    sessionDurationSeconds: billedSessionDurationSeconds,
+                    keytermsEnabled: !self.keyterms.isEmpty,
+                    requestStartedAt: self.requestStartedAt
+                )
+            }
+
+            if self.isAwaitingExplicitFinalTranscript && !self.hasDeliveredFinalTranscript {
                 self.deliverFinalTranscriptIfNeeded(self.bestAvailableTranscriptText())
             }
         }
@@ -373,24 +446,65 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
         sendJSONMessage(["type": "Terminate"])
     }
 
-    private func sendJSONMessage(_ payload: [String: Any]) {
+    private func sendJSONMessage(
+        _ payload: [String: Any],
+        delaySeconds: TimeInterval = 0
+    ) {
         guard let jsonData = try? JSONSerialization.data(withJSONObject: payload),
               let jsonString = String(data: jsonData, encoding: .utf8) else {
             return
         }
 
-        sendQueue.async { [weak self] in
-            guard let self, let webSocketTask = self.webSocketTask else { return }
+        let sendWork = { [weak self] in
+            guard let self, !self.isCancelled else { return }
+            guard self.isSocketReady, let webSocketTask = self.webSocketTask else {
+                self.pendingControlMessages.append(jsonString)
+                return
+            }
             webSocketTask.send(.string(jsonString)) { [weak self] error in
                 if let error {
                     self?.failSession(with: error)
                 }
             }
         }
+
+        if delaySeconds > 0 {
+            sendQueue.asyncAfter(deadline: .now() + delaySeconds, execute: sendWork)
+        } else {
+            sendQueue.async(execute: sendWork)
+        }
+    }
+
+    private func handleSocketReady() {
+        sendQueue.async { [weak self] in
+            guard let self, !self.isCancelled else { return }
+            self.isSocketReady = true
+
+            guard let webSocketTask = self.webSocketTask else { return }
+
+            let pendingAudioChunks = self.pendingAudioChunks
+            self.pendingAudioChunks.removeAll(keepingCapacity: false)
+            for pendingAudioChunk in pendingAudioChunks {
+                webSocketTask.send(.data(pendingAudioChunk)) { [weak self] error in
+                    if let error {
+                        self?.failSession(with: error)
+                    }
+                }
+            }
+
+            let pendingControlMessages = self.pendingControlMessages
+            self.pendingControlMessages.removeAll(keepingCapacity: false)
+            for pendingControlMessage in pendingControlMessages {
+                webSocketTask.send(.string(pendingControlMessage)) { [weak self] error in
+                    if let error {
+                        self?.failSession(with: error)
+                    }
+                }
+            }
+        }
     }
 
     private func failSession(with error: Error) {
-        resolveReadyContinuationIfNeeded(with: .failure(error))
         stateQueue.async {
             let latestTranscriptText = self.bestAvailableTranscriptText()
 
@@ -418,22 +532,6 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
         return latestTranscriptText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func resolveReadyContinuationIfNeeded(with result: Result<Void, Error>) {
-        stateQueue.async {
-            guard !self.hasResolvedReadyContinuation else { return }
-            self.hasResolvedReadyContinuation = true
-
-            switch result {
-            case .success:
-                self.readyContinuation?.resume()
-            case .failure(let error):
-                self.readyContinuation?.resume(throwing: error)
-            }
-
-            self.readyContinuation = nil
-        }
-    }
-
     private static func makeWebsocketURL(
         temporaryToken: String?,
         keyterms: [String]
@@ -447,8 +545,9 @@ private final class AssemblyAIStreamingTranscriptionSession: NSObject, BuddyStre
         var queryItems = [
             URLQueryItem(name: "sample_rate", value: "16000"),
             URLQueryItem(name: "encoding", value: "pcm_s16le"),
-            URLQueryItem(name: "format_turns", value: "true"),
-            URLQueryItem(name: "speech_model", value: "u3-rt-pro")
+            URLQueryItem(name: "speech_model", value: "u3-rt-pro"),
+            URLQueryItem(name: "min_turn_silence", value: "\(Self.minTurnSilenceMilliseconds)"),
+            URLQueryItem(name: "max_turn_silence", value: "\(Self.maxTurnSilenceMilliseconds)")
         ]
 
         let normalizedKeyterms = keyterms

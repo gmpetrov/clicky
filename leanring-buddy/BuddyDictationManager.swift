@@ -463,6 +463,17 @@ final class BuddyDictationManager: NSObject, ObservableObject {
             isPreparingToRecord = false
             print("🎙️ BuddyDictationManager: recognition session started")
         } catch {
+            let isCancellationError = error is CancellationError
+                || (error as? URLError)?.code == .cancelled
+                || pendingStartRequestIdentifier != startRequestIdentifier
+
+            if isCancellationError {
+                isPreparingToRecord = false
+                print("🎙️ BuddyDictationManager: recognition startup cancelled before recording began")
+                resetSessionState()
+                return
+            }
+
             isPreparingToRecord = false
             lastErrorMessage = userFacingErrorMessage(
                 from: error,
@@ -547,10 +558,18 @@ final class BuddyDictationManager: NSObject, ObservableObject {
         print("🎙️ BuddyDictationManager: provider ready, starting audio engine")
 
         let inputNode = audioEngine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let hardwareInputFormat = inputNode.inputFormat(forBus: 0)
+        let targetAudioChunkDurationSeconds = 0.1
+        let audioTapBufferSize = AVAudioFrameCount(
+            max(1024, Int(hardwareInputFormat.sampleRate * targetAudioChunkDurationSeconds))
+        )
 
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(
+            onBus: 0,
+            bufferSize: audioTapBufferSize,
+            format: hardwareInputFormat
+        ) { [weak self] buffer, _ in
             self?.activeTranscriptionSession?.appendAudioBuffer(buffer)
             self?.updateAudioPowerLevel(from: buffer)
         }

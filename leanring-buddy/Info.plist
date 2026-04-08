@@ -4,6 +4,12 @@
 <dict>
 	<key>LSUIElement</key>
 	<true/>
+	<key>ClickyDesktopClientID</key>
+	<string>clicky-macos</string>
+	<key>ClickyWebBaseURL</key>
+	<string>http://localhost:3000</string>
+	<key>ClickyWorkerBaseURL</key>
+	<string>http://localhost:8787</string>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/julianjear/makesomething-mac-app/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>

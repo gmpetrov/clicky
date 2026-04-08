@@ -12,7 +12,7 @@ import SwiftUI
 
 struct CompanionPanelView: View {
     @ObservedObject var companionManager: CompanionManager
-    @State private var emailInput: String = ""
+    @ObservedObject var clickyAccountManager: ClickyAccountManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -25,7 +25,15 @@ struct CompanionPanelView: View {
                 .padding(.top, 16)
                 .padding(.horizontal, 16)
 
-            if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
+            Spacer()
+                .frame(height: 16)
+
+            desktopAccessSection
+                .padding(.horizontal, 16)
+
+            if companionManager.hasCompletedOnboarding
+                && companionManager.allPermissionsGranted
+                && clickyAccountManager.hasActiveSubscription {
                 Spacer()
                     .frame(height: 12)
 
@@ -41,7 +49,9 @@ struct CompanionPanelView: View {
                     .padding(.horizontal, 16)
             }
 
-            if !companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
+            if !companionManager.hasCompletedOnboarding
+                && companionManager.allPermissionsGranted
+                && clickyAccountManager.hasActiveSubscription {
                 Spacer()
                     .frame(height: 16)
 
@@ -58,7 +68,9 @@ struct CompanionPanelView: View {
             //         .padding(.horizontal, 16)
             // }
 
-            if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
+            if companionManager.hasCompletedOnboarding
+                && companionManager.allPermissionsGranted
+                && clickyAccountManager.hasActiveSubscription {
                 Spacer()
                     .frame(height: 16)
 
@@ -126,21 +138,31 @@ struct CompanionPanelView: View {
 
     @ViewBuilder
     private var permissionsCopySection: some View {
-        if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
-            Text("Hold Control+Option to talk.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(DS.Colors.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else if companionManager.allPermissionsGranted && !companionManager.hasSubmittedEmail {
+        if !clickyAccountManager.isAuthenticated {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Drop your email to get started.")
+                Text("Sign in to unlock Clicky.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
-                Text("If I keep building this, I'll keep you in the loop.")
+                Text("Desktop access now runs through the web app so billing and device login stay in sync.")
                     .font(.system(size: 11))
                     .foregroundColor(DS.Colors.textTertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else if !clickyAccountManager.hasActiveSubscription {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Starter plan required.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+                Text("You're signed in, but the desktop app stays behind the paywall until your subscription is active.")
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
+            Text("Hold Control+Option to talk.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         } else if companionManager.allPermissionsGranted {
             Text("You're all set. Hit Start to meet Clicky.")
                 .font(.system(size: 12, weight: .medium))
@@ -179,65 +201,163 @@ struct CompanionPanelView: View {
         }
     }
 
-    // MARK: - Email + Start Button
+    // MARK: - Desktop Access
 
-    @ViewBuilder
-    private var startButton: some View {
-        if !companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
-            if !companionManager.hasSubmittedEmail {
-                VStack(spacing: 8) {
-                    TextField("Enter your email", text: $emailInput)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                        .foregroundColor(DS.Colors.textPrimary)
+    private var desktopAccessSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("DESKTOP ACCESS")
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundColor(DS.Colors.textTertiary)
+
+            if !clickyAccountManager.isAuthenticated {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(clickyAccountManager.isAuthenticatingDevice ? "Finish sign-in in your browser." : "Connect this Mac to your Clicky account.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    if let pendingDeviceUserCode = clickyAccountManager.pendingDeviceUserCode {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Your device code")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(DS.Colors.textTertiary)
+                                Text(pendingDeviceUserCode)
+                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                    .foregroundColor(DS.Colors.textPrimary)
+                            }
+
+                            Spacer()
+
+                            Button(action: {
+                                clickyAccountManager.openPendingVerificationPage()
+                            }) {
+                                Text("Open")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(DS.Colors.textOnAccent)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule()
+                                            .fill(DS.Colors.accent)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .pointerCursor()
+                        }
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
-                                .fill(Color.white.opacity(0.08))
+                                .fill(Color.white.opacity(0.06))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
                                 .stroke(DS.Colors.borderSubtle, lineWidth: 0.5)
                         )
+                    }
+
+                    if let currentErrorMessage = clickyAccountManager.currentErrorMessage {
+                        Text(currentErrorMessage)
+                            .font(.system(size: 11))
+                            .foregroundColor(DS.Colors.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     Button(action: {
-                        companionManager.submitEmail(emailInput)
+                        clickyAccountManager.startDeviceAuthorization()
                     }) {
-                        Text("Submit")
+                        Text(clickyAccountManager.isAuthenticatingDevice ? "Refreshing sign-in..." : "Continue in Browser")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(DS.Colors.textOnAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: DS.CornerRadius.large, style: .continuous)
-                                    .fill(emailInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                          ? DS.Colors.accent.opacity(0.4)
-                                          : DS.Colors.accent)
+                                    .fill(DS.Colors.accent)
                             )
                     }
                     .buttonStyle(.plain)
                     .pointerCursor()
-                    .disabled(emailInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(clickyAccountManager.isAuthenticatingDevice)
+                }
+            } else if !clickyAccountManager.hasActiveSubscription {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Signed in as \(clickyAccountManager.currentUserEmailAddress ?? "your account")")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    Text("Upgrade to Starter in the web dashboard to unlock voice, vision, and pointing inside Clicky.")
+                        .font(.system(size: 11))
+                        .foregroundColor(DS.Colors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let currentErrorMessage = clickyAccountManager.currentErrorMessage {
+                        Text(currentErrorMessage)
+                            .font(.system(size: 11))
+                            .foregroundColor(DS.Colors.warning)
+                    }
+
+                    HStack(spacing: 8) {
+                        secondaryActionButton(title: "Upgrade") {
+                            clickyAccountManager.openPricingPage()
+                        }
+                        secondaryActionButton(title: "Refresh") {
+                            clickyAccountManager.refreshAccount()
+                        }
+                        secondaryActionButton(title: "Sign Out") {
+                            clickyAccountManager.signOut()
+                        }
+                    }
                 }
             } else {
-                Button(action: {
-                    companionManager.triggerOnboarding()
-                }) {
-                    Text("Start")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(DS.Colors.textOnAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: DS.CornerRadius.large, style: .continuous)
-                                .fill(DS.Colors.accent)
-                        )
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Connected as \(clickyAccountManager.currentUserEmailAddress ?? "your account")")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    Text("\(clickyAccountManager.currentPlanDisplayName) is active. Billing and desktop access now stay synced through the web dashboard.")
+                        .font(.system(size: 11))
+                        .foregroundColor(DS.Colors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if clickyAccountManager.isRefreshingAccount {
+                        Text("Refreshing account status...")
+                            .font(.system(size: 11))
+                            .foregroundColor(DS.Colors.textTertiary)
+                    }
+
+                    HStack(spacing: 8) {
+                        secondaryActionButton(title: "Dashboard") {
+                            clickyAccountManager.openDashboardPage()
+                        }
+                        secondaryActionButton(title: "Refresh") {
+                            clickyAccountManager.refreshAccount()
+                        }
+                        secondaryActionButton(title: "Sign Out") {
+                            clickyAccountManager.signOut()
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
             }
         }
+    }
+
+    private var startButton: some View {
+        Button(action: {
+            companionManager.triggerOnboarding()
+        }) {
+            Text("Start")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(DS.Colors.textOnAccent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: DS.CornerRadius.large, style: .continuous)
+                        .fill(DS.Colors.accent)
+                )
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
     }
 
     // MARK: - Permissions
@@ -607,8 +727,8 @@ struct CompanionPanelView: View {
             Spacer()
 
             HStack(spacing: 0) {
-                modelOptionButton(label: "Sonnet", modelID: "claude-sonnet-4-6")
-                modelOptionButton(label: "Opus", modelID: "claude-opus-4-6")
+                modelOptionButton(label: "Sonnet", modelID: "anthropic/claude-sonnet-4.6")
+                modelOptionButton(label: "Opus", modelID: "anthropic/claude-opus-4.6")
             }
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -696,7 +816,7 @@ struct CompanionPanelView: View {
             .buttonStyle(.plain)
             .pointerCursor()
 
-            if companionManager.hasCompletedOnboarding {
+            if companionManager.hasCompletedOnboarding && clickyAccountManager.hasActiveSubscription {
                 Spacer()
 
                 Button(action: {
@@ -726,6 +846,12 @@ struct CompanionPanelView: View {
     }
 
     private var statusDotColor: Color {
+        if !clickyAccountManager.isAuthenticated {
+            return DS.Colors.warning
+        }
+        if !clickyAccountManager.hasActiveSubscription {
+            return DS.Colors.accent
+        }
         if !companionManager.isOverlayVisible {
             return DS.Colors.textTertiary
         }
@@ -740,6 +866,12 @@ struct CompanionPanelView: View {
     }
 
     private var statusText: String {
+        if !clickyAccountManager.isAuthenticated {
+            return "Sign In"
+        }
+        if !clickyAccountManager.hasActiveSubscription {
+            return "Locked"
+        }
         if !companionManager.hasCompletedOnboarding || !companionManager.allPermissionsGranted {
             return "Setup"
         }
@@ -758,4 +890,19 @@ struct CompanionPanelView: View {
         }
     }
 
+    private func secondaryActionButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(DS.Colors.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .stroke(DS.Colors.borderSubtle, lineWidth: 0.8)
+                )
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+    }
 }

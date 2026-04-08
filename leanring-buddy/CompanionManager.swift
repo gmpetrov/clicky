@@ -23,6 +23,9 @@ enum CompanionVoiceState {
 
 @MainActor
 final class CompanionManager: ObservableObject {
+    private static let sonnetModelIdentifier = "anthropic/claude-sonnet-4.6"
+    private static let opusModelIdentifier = "anthropic/claude-opus-4.6"
+
     @Published private(set) var voiceState: CompanionVoiceState = .idle
     @Published private(set) var lastTranscript: String?
     @Published private(set) var currentAudioPowerLevel: CGFloat = 0
@@ -63,6 +66,7 @@ final class CompanionManager: ObservableObject {
     private var onboardingMusicFadeTimer: Timer?
 
     let buddyDictationManager = BuddyDictationManager()
+    let clickyAccountManager = ClickyAccountManager()
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
     // Response text is now displayed inline on the cursor overlay via
@@ -70,14 +74,27 @@ final class CompanionManager: ObservableObject {
 
     /// Base URL for the Cloudflare Worker proxy. All API requests route
     /// through this so keys never ship in the app binary.
-    private static let workerBaseURL = "https://your-worker-name.your-subdomain.workers.dev"
+    private static var workerBaseURL: String {
+        AppBundleConfiguration.stringValue(forKey: "ClickyWorkerBaseURL") ?? "http://localhost:8787"
+    }
 
-    private lazy var claudeAPI: ClaudeAPI = {
-        return ClaudeAPI(proxyURL: "\(Self.workerBaseURL)/chat", model: selectedModel)
+    private lazy var openRouterAPI: OpenRouterAPI = {
+        return OpenRouterAPI(
+            proxyURL: "\(Self.workerBaseURL)/chat",
+            model: selectedModel,
+            authorizationHeaderProvider: {
+                ClickyDesktopSessionStore.authorizationHeaderValue()
+            }
+        )
     }()
 
     private lazy var elevenLabsTTSClient: ElevenLabsTTSClient = {
-        return ElevenLabsTTSClient(proxyURL: "\(Self.workerBaseURL)/tts")
+        return ElevenLabsTTSClient(
+            proxyURL: "\(Self.workerBaseURL)/tts",
+            authorizationHeaderProvider: {
+                ClickyDesktopSessionStore.authorizationHeaderValue()
+            }
+        )
     }()
 
     /// Conversation history so Claude remembers prior exchanges within a session.
@@ -91,6 +108,7 @@ final class CompanionManager: ObservableObject {
     private var shortcutTransitionCancellable: AnyCancellable?
     private var voiceStateCancellable: AnyCancellable?
     private var audioPowerCancellable: AnyCancellable?
+    private var desktopAccessCancellable: AnyCancellable?
     private var accessibilityCheckTimer: Timer?
     private var pendingKeyboardShortcutStartTask: Task<Void, Never>?
     /// Scheduled hide for transient cursor mode — cancelled if the user
@@ -107,13 +125,15 @@ final class CompanionManager: ObservableObject {
     /// Used by the panel to show accurate status text ("Active" vs "Ready").
     @Published private(set) var isOverlayVisible: Bool = false
 
-    /// The Claude model used for voice responses. Persisted to UserDefaults.
-    @Published var selectedModel: String = UserDefaults.standard.string(forKey: "selectedClaudeModel") ?? "claude-sonnet-4-6"
+    /// The OpenRouter model used for voice responses. Persisted to UserDefaults.
+    @Published var selectedModel: String = CompanionManager.normalizedModelIdentifier(
+        UserDefaults.standard.string(forKey: "selectedClaudeModel")
+    )
 
     func setSelectedModel(_ model: String) {
         selectedModel = model
         UserDefaults.standard.set(model, forKey: "selectedClaudeModel")
-        claudeAPI.model = model
+        openRouterAPI.model = model
     }
 
     /// User preference for whether the Clicky cursor should be shown.
@@ -129,7 +149,7 @@ final class CompanionManager: ObservableObject {
         transientHideTask?.cancel()
         transientHideTask = nil
 
-        if enabled {
+        if enabled && clickyAccountManager.hasActiveSubscription {
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
@@ -179,15 +199,20 @@ final class CompanionManager: ObservableObject {
         bindVoiceStateObservation()
         bindAudioPowerLevel()
         bindShortcutTransitions()
-        // Eagerly touch the Claude API so its TLS warmup handshake completes
+        bindDesktopAccessObservation()
+        clickyAccountManager.restoreStoredSessionIfNeeded()
+        // Eagerly touch the OpenRouter API so its TLS warmup handshake completes
         // well before the onboarding demo fires at ~40s into the video.
-        _ = claudeAPI
+        _ = openRouterAPI
 
         // If the user already completed onboarding AND all permissions are
         // still granted, show the cursor overlay immediately. If permissions
         // were revoked (e.g. signing change), don't show the cursor — the
         // panel will show the permissions UI instead.
-        if hasCompletedOnboarding && allPermissionsGranted && isClickyCursorEnabled {
+        if hasCompletedOnboarding
+            && allPermissionsGranted
+            && isClickyCursorEnabled
+            && clickyAccountManager.hasActiveSubscription {
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
@@ -298,6 +323,7 @@ final class CompanionManager: ObservableObject {
         shortcutTransitionCancellable?.cancel()
         voiceStateCancellable?.cancel()
         audioPowerCancellable?.cancel()
+        desktopAccessCancellable?.cancel()
         accessibilityCheckTimer?.invalidate()
         accessibilityCheckTimer = nil
     }
@@ -382,7 +408,11 @@ final class CompanionManager: ObservableObject {
                     ClickyAnalytics.trackPermissionGranted(permission: "screen_content")
 
                     // If onboarding was already completed, show the cursor overlay now
-                    if hasCompletedOnboarding && allPermissionsGranted && !isOverlayVisible && isClickyCursorEnabled {
+                    if hasCompletedOnboarding
+                        && allPermissionsGranted
+                        && !isOverlayVisible
+                        && isClickyCursorEnabled
+                        && clickyAccountManager.hasActiveSubscription {
                         overlayWindowManager.hasShownOverlayBefore = true
                         overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
                         isOverlayVisible = true
@@ -470,12 +500,51 @@ final class CompanionManager: ObservableObject {
             }
     }
 
+    private func bindDesktopAccessObservation() {
+        desktopAccessCancellable = clickyAccountManager.$hasActiveSubscription
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] hasDesktopAccess in
+                self?.handleDesktopAccessChange(hasDesktopAccess)
+            }
+    }
+
+    private func handleDesktopAccessChange(_ hasDesktopAccess: Bool) {
+        if hasDesktopAccess {
+            guard hasCompletedOnboarding,
+                  allPermissionsGranted,
+                  isClickyCursorEnabled,
+                  !isOverlayVisible else {
+                return
+            }
+
+            overlayWindowManager.hasShownOverlayBefore = true
+            overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
+            isOverlayVisible = true
+            return
+        }
+
+        currentResponseTask?.cancel()
+        currentResponseTask = nil
+        elevenLabsTTSClient.stopPlayback()
+        clearDetectedElementLocation()
+        overlayWindowManager.hideOverlay()
+        isOverlayVisible = false
+    }
+
     private func handleShortcutTransition(_ transition: BuddyPushToTalkShortcut.ShortcutTransition) {
         switch transition {
         case .pressed:
             guard !buddyDictationManager.isDictationInProgress else { return }
             // Don't register push-to-talk while the onboarding video is playing
             guard !showOnboardingVideo else { return }
+            guard clickyAccountManager.isAuthenticated else {
+                showDesktopAccessPanel()
+                return
+            }
+            guard clickyAccountManager.hasActiveSubscription else {
+                showDesktopAccessPanel()
+                return
+            }
 
             // Cancel any pending transient hide so the overlay stays visible
             transientHideTask?.cancel()
@@ -610,7 +679,7 @@ final class CompanionManager: ObservableObject {
                     (userPlaceholder: entry.userTranscript, assistantResponse: entry.assistantResponse)
                 }
 
-                let (fullResponseText, _) = try await claudeAPI.analyzeImageStreaming(
+                let (fullResponseText, _) = try await openRouterAPI.analyzeImageStreaming(
                     images: labeledImages,
                     systemPrompt: Self.companionVoiceResponseSystemPrompt,
                     conversationHistory: historyForAPI,
@@ -705,17 +774,23 @@ final class CompanionManager: ObservableObject {
                         // speakText returns after player.play() — audio is now playing
                         voiceState = .responding
                     } catch {
+                        let didHandleDesktopAccessFailure = handleDesktopAccessFailureIfNeeded(error)
                         ClickyAnalytics.trackTTSError(error: error.localizedDescription)
                         print("⚠️ ElevenLabs TTS error: \(error)")
-                        speakCreditsErrorFallback()
+                        if !didHandleDesktopAccessFailure {
+                            speakCreditsErrorFallback()
+                        }
                     }
                 }
             } catch is CancellationError {
                 // User spoke again — response was interrupted
             } catch {
+                let didHandleDesktopAccessFailure = handleDesktopAccessFailureIfNeeded(error)
                 ClickyAnalytics.trackResponseError(error: error.localizedDescription)
                 print("⚠️ Companion response error: \(error)")
-                speakCreditsErrorFallback()
+                if !didHandleDesktopAccessFailure {
+                    speakCreditsErrorFallback()
+                }
             }
 
             if !Task.isCancelled {
@@ -763,6 +838,62 @@ final class CompanionManager: ObservableObject {
         let synthesizer = NSSpeechSynthesizer()
         synthesizer.startSpeaking(utterance)
         voiceState = .responding
+    }
+
+    private func speakDesktopAccessFallback() {
+        let utterance: String
+        if clickyAccountManager.isAuthenticated {
+            utterance = "Your Clicky subscription needs attention. Open the dashboard to unlock the desktop app again."
+        } else {
+            utterance = "Please sign in to Clicky in the browser before using the desktop app."
+        }
+
+        let synthesizer = NSSpeechSynthesizer()
+        synthesizer.startSpeaking(utterance)
+        voiceState = .responding
+    }
+
+    private func showDesktopAccessPanel() {
+        if ClickyDesktopSessionStore.loadBearerToken() != nil {
+            clickyAccountManager.refreshAccount()
+        }
+
+        NotificationCenter.default.post(name: .clickyShowPanel, object: nil)
+    }
+
+    private func handleDesktopAccessFailureIfNeeded(_ error: Error) -> Bool {
+        guard didHandleDesktopAccessFailure(error) else { return false }
+
+        clickyAccountManager.handleAccessRevoked()
+        showDesktopAccessPanel()
+        return true
+    }
+
+    private func didHandleDesktopAccessFailure(_ error: Error) -> Bool {
+        let errorCode = (error as NSError).code
+        guard errorCode == 401 || errorCode == 402 else {
+            return false
+        }
+
+        let normalizedErrorDescription = error.localizedDescription.lowercased()
+        let desktopAccessFailureMarkers = [
+            "missing_authorization",
+            "invalid_session",
+            "not_authenticated",
+            "subscription_required",
+            "a desktop access token is required before using clicky",
+            "your clicky session has expired",
+            "please sign in to your clicky account before using the desktop app",
+            "an active clicky starter subscription is required before using the ai worker",
+            "sign in to clicky before asking the desktop companion to use the ai worker"
+        ]
+
+        guard desktopAccessFailureMarkers.contains(where: { normalizedErrorDescription.contains($0) }) else {
+            return false
+        }
+
+        speakDesktopAccessFallback()
+        return true
     }
 
     // MARK: - Point Tag Parsing
@@ -982,7 +1113,7 @@ final class CompanionManager: ObservableObject {
                 let dimensionInfo = " (image dimensions: \(cursorScreenCapture.screenshotWidthInPixels)x\(cursorScreenCapture.screenshotHeightInPixels) pixels)"
                 let labeledImages = [(data: cursorScreenCapture.imageData, label: cursorScreenCapture.label + dimensionInfo)]
 
-                let (fullResponseText, _) = try await claudeAPI.analyzeImageStreaming(
+                let (fullResponseText, _) = try await openRouterAPI.analyzeImageStreaming(
                     images: labeledImages,
                     systemPrompt: Self.onboardingDemoSystemPrompt,
                     userPrompt: "look around my screen and find something interesting to point at",
@@ -1021,6 +1152,21 @@ final class CompanionManager: ObservableObject {
             } catch {
                 print("⚠️ Onboarding demo error: \(error)")
             }
+        }
+    }
+
+    private static func normalizedModelIdentifier(_ rawModelIdentifier: String?) -> String {
+        switch rawModelIdentifier {
+        case Self.opusModelIdentifier:
+            return Self.opusModelIdentifier
+        case "claude-opus-4-6":
+            return Self.opusModelIdentifier
+        case "claude-sonnet-4-6":
+            return Self.sonnetModelIdentifier
+        case Self.sonnetModelIdentifier:
+            return Self.sonnetModelIdentifier
+        default:
+            return Self.sonnetModelIdentifier
         }
     }
 }
