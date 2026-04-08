@@ -22,7 +22,7 @@ export default function HomePage() {
           your cursor.
         </h1>
         <p className="landing-subtitle">
-          Hold a shortcut, ask out loud. Clicky sees your screen, answers with voice,
+          Hold a shortcut, ask out loud. Pointerly sees your screen, answers with voice,
           and points at the exact control you need.
         </p>
         <div className="landing-cta-row">

@@ -80,7 +80,7 @@ final class AssemblyAIStreamingTranscriptionProvider: BuddyTranscriptionProvider
             let body = String(data: data, encoding: .utf8) ?? "unknown"
             if statusCode == 404 {
                 throw AssemblyAIStreamingTranscriptionProviderError(
-                    message: "Failed to fetch AssemblyAI token from \(Self.tokenProxyURL) (HTTP 404). This usually means ClickyWorkerBaseURL is pointing at the wrong local server or the Worker is not running on that port."
+                    message: "Failed to fetch an AssemblyAI token from \(Self.tokenProxyURL) (HTTP 404). This usually means the Worker base URL is pointing at the wrong local server or the Worker is not running on that port."
                 )
             }
 

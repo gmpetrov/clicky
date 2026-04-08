@@ -1,11 +1,11 @@
-# Clicky - Agent Instructions
+# Pointerly - Agent Instructions
 
 <!-- This is the single source of truth for all AI coding agents. CLAUDE.md is a symlink to this file. -->
 <!-- AGENTS.md spec: https://github.com/agentsmd/agents.md — supported by Claude Code, Cursor, Copilot, Gemini CLI, and others. -->
 
 ## Overview
 
-Clicky now has two surfaces:
+Pointerly now has two surfaces:
 
 1. A macOS menu bar companion app that lives entirely in the status bar (no dock icon, no main window). Clicking the menu bar icon opens a custom floating panel with voice controls, account state, and the paywall gate. Push-to-talk (ctrl+option) captures voice input, transcribes it via AssemblyAI streaming, and sends the transcript plus screenshots of the user's screen through the authenticated worker. The AI responds with text (streamed via SSE) and voice (ElevenLabs TTS). A blue cursor overlay can fly to and point at UI elements the model references on any connected monitor.
 2. A Next.js web app that handles landing page marketing, auth, billing, dashboard management, and Better Auth device authorization for the desktop app.
@@ -63,7 +63,7 @@ Worker vars: `ELEVENLABS_VOICE_ID`, `CLICKY_APP_URL`
 
 **Usage Ledger + Period Summary**: Cost tracking is split into two tables. `usageEvent` stores immutable per-call usage rows with raw usage fields and computed cost, while `usagePeriodSummary` keeps the running total for the active subscription period. This makes backfills and recalculations possible later without losing the original usage basis.
 
-**Transient Cursor Mode**: When "Show Clicky" is off, pressing the hotkey fades in the cursor overlay for the duration of the interaction (recording → response → TTS → optional pointing), then fades it out automatically after 1 second of inactivity.
+**Transient Cursor Mode**: When "Show Pointerly" is off, pressing the hotkey fades in the cursor overlay for the duration of the interaction (recording → response → TTS → optional pointing), then fades it out automatically after 1 second of inactivity.
 
 ## Key Files
 
@@ -93,6 +93,7 @@ Worker vars: `ELEVENLABS_VOICE_ID`, `CLICKY_APP_URL`
 | `ClickyAnalytics.swift` | ~121 | PostHog analytics integration for usage tracking. |
 | `WindowPositionManager.swift` | ~262 | Window placement logic, Screen Recording permission flow, and accessibility permission helpers. |
 | `AppBundleConfiguration.swift` | ~28 | Runtime configuration reader for keys stored in the app bundle Info.plist. |
+| `scripts/release.sh` | ~308 | Production packaging script for the macOS app. Archives a Release build, injects the production web/worker URLs, exports a Developer ID-signed app, notarizes it, and creates upload-ready ZIP/optional DMG artifacts for website distribution. |
 | `src/lib/auth.ts` | ~65 | Better Auth server configuration. Wires Prisma, email/password auth, optional Google OAuth, bearer tokens, device authorization, and the Stripe subscription plugin to the existing Starter plan. |
 | `src/lib/usage-metering.ts` | ~360 | Shared usage-ingestion and aggregation logic. Validates worker/desktop metering payloads, resolves the active billing period, computes provider costs, writes immutable usage rows, and upserts period summaries. |
 | `src/app/page.tsx` | ~60 | Minimal marketing landing page. Centered hero, feature grid, pricing section, and the BlueCursorFollower effect that replicates the desktop cursor companion in the browser. |
@@ -131,11 +132,16 @@ open leanring-buddy.xcodeproj
 
 # Select the leanring-buddy scheme, set signing team, Cmd+R to build and run
 
+# Build a production desktop DMG for website/S3 downloads
+CLICKY_WEB_BASE_URL=https://www.pointerly.xyz \
+CLICKY_WORKER_BASE_URL=https://worker.pointerly.xyz \
+./scripts/release.sh [--version 1.2.0 --build 42]
+
 # Known non-blocking warnings: Swift 6 concurrency warnings,
 # deprecated onChange warning in OverlayWindow.swift. Do NOT attempt to fix these.
 ```
 
-**Do NOT run `xcodebuild` from the terminal** — it invalidates TCC (Transparency, Consent, and Control) permissions and the app will need to re-request screen recording, accessibility, etc.
+**Do NOT run `xcodebuild` from the terminal for local development/debugging** — it invalidates TCC (Transparency, Consent, and Control) permissions and the app will need to re-request screen recording, accessibility, etc. The production packaging exception is `./scripts/release.sh`, which is intended for dedicated release builds.
 
 ## Cloudflare Worker
 
@@ -195,7 +201,7 @@ IMPORTANT: Follow these naming rules strictly. Clarity is the top priority.
 - Do not add docstrings, comments, or type annotations to code you did not change
 - Do not try to fix the known non-blocking warnings (Swift 6 concurrency, deprecated onChange)
 - Do not rename the project directory or scheme (the "leanring" typo is intentional/legacy)
-- Do not run `xcodebuild` from the terminal — it invalidates TCC permissions
+- Do not run `xcodebuild` from the terminal for local development/debugging — it invalidates TCC permissions. The production packaging exception is `./scripts/release.sh`.
 
 ## Git Workflow
 

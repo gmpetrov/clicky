@@ -37,8 +37,8 @@ struct CompanionPanelView: View {
                 Spacer()
                     .frame(height: 12)
 
-                modelPickerRow
-                    .padding(.horizontal, 16)
+                // modelPickerRow
+                //     .padding(.horizontal, 16)
             }
 
             if !companionManager.allPermissionsGranted {
@@ -59,7 +59,7 @@ struct CompanionPanelView: View {
                     .padding(.horizontal, 16)
             }
 
-            // Show Clicky toggle — hidden for now
+            // Show Pointerly toggle — hidden for now
             // if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
             //     Spacer()
             //         .frame(height: 16)
@@ -104,7 +104,7 @@ struct CompanionPanelView: View {
                     .frame(width: 8, height: 8)
                     .shadow(color: statusDotColor.opacity(0.6), radius: 4)
 
-                Text("Clicky")
+                Text("Pointerly")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(DS.Colors.textPrimary)
             }
@@ -140,7 +140,7 @@ struct CompanionPanelView: View {
     private var permissionsCopySection: some View {
         if !clickyAccountManager.isAuthenticated {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Sign in to unlock Clicky.")
+                Text("Sign in to unlock Pointerly.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
                 Text("Desktop access now runs through the web app so billing and device login stay in sync.")
@@ -149,7 +149,7 @@ struct CompanionPanelView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if !clickyAccountManager.hasActiveSubscription {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 4) {   
                 Text("Starter plan required.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
@@ -164,7 +164,7 @@ struct CompanionPanelView: View {
                 .foregroundColor(DS.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if companionManager.allPermissionsGranted {
-            Text("You're all set. Hit Start to meet Clicky.")
+            Text("You're all set. Hit Start to meet Pointerly.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -175,7 +175,7 @@ struct CompanionPanelView: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(DS.Colors.textSecondary)
 
-                Text("Some permissions were revoked. Grant all four below to keep using Clicky.")
+                Text("Some permissions were revoked. Grant all four below to keep using Pointerly.")
                     .font(.system(size: 11))
                     .foregroundColor(DS.Colors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -183,16 +183,16 @@ struct CompanionPanelView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Hi, I'm Farza. This is Clicky.")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(DS.Colors.textSecondary)
+                // Text("Hi, I'm Alex. This is Pointerly.")
+                //     .font(.system(size: 12, weight: .bold))
+                //     .foregroundColor(DS.Colors.textSecondary)
 
-                Text("A side project I made for fun to help me learn stuff as I use my computer.")
-                    .font(.system(size: 11))
-                    .foregroundColor(DS.Colors.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Text("A side project I made for fun to help me learn stuff as I use my computer.")
+                //     .font(.system(size: 11))
+                //     .foregroundColor(DS.Colors.textTertiary)
+                //     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Nothing runs in the background. Clicky will only take a screenshot when you press the hot key. So, you can give that permission in peace. If you are still sus, eh, I can't do much there champ.")
+                Text("Nothing runs in the background. Pointerly will only take a screenshot when you press the hot key. So, you can give that permission in peace. If you are still sus, eh, I can't do much there champ.")
                     .font(.system(size: 11))
                     .foregroundColor(Color(red: 0.9, green: 0.4, blue: 0.4))
                     .fixedSize(horizontal: false, vertical: true)
@@ -211,7 +211,7 @@ struct CompanionPanelView: View {
 
             if !clickyAccountManager.isAuthenticated {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(clickyAccountManager.isAuthenticatingDevice ? "Finish sign-in in your browser." : "Connect this Mac to your Clicky account.")
+                    Text(clickyAccountManager.isAuthenticatingDevice ? "Finish sign-in in your browser." : "Connect this Mac to your Pointerly account.")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(DS.Colors.textSecondary)
 
@@ -286,7 +286,7 @@ struct CompanionPanelView: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(DS.Colors.textSecondary)
 
-                    Text("Upgrade to Starter in the web dashboard to unlock voice, vision, and pointing inside Clicky.")
+                    Text("Upgrade to Starter in the web dashboard to unlock voice, vision, and pointing inside Pointerly.")
                         .font(.system(size: 11))
                         .foregroundColor(DS.Colors.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -665,7 +665,7 @@ struct CompanionPanelView: View {
 
 
 
-    // MARK: - Show Clicky Cursor Toggle
+    // MARK: - Show Pointerly Cursor Toggle
 
     private var showClickyCursorToggleRow: some View {
         HStack {
@@ -675,7 +675,7 @@ struct CompanionPanelView: View {
                     .foregroundColor(DS.Colors.textTertiary)
                     .frame(width: 16)
 
-                Text("Show Clicky")
+                Text("Show Pointerly")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
             }
@@ -765,7 +765,7 @@ struct CompanionPanelView: View {
 
     private var dmFarzaButton: some View {
         Button(action: {
-            if let url = URL(string: "https://x.com/farzatv") {
+            if let url = URL(string: "mailto:support@pointerly.xyz") {
                 NSWorkspace.shared.open(url)
             }
         }) {
@@ -774,9 +774,9 @@ struct CompanionPanelView: View {
                     .font(.system(size: 12, weight: .medium))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Got feedback? DM me")
+                    Text("Got feedback? send us an email")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("Bugs, ideas, anything — I read every message.")
+                    Text("support@pointerly.xyz")
                         .font(.system(size: 10))
                         .foregroundColor(DS.Colors.textTertiary)
                 }
@@ -808,7 +808,7 @@ struct CompanionPanelView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "power")
                         .font(.system(size: 11, weight: .medium))
-                    Text("Quit Clicky")
+                    Text("Quit Pointerly")
                         .font(.system(size: 12, weight: .medium))
                 }
                 .foregroundColor(DS.Colors.textTertiary)

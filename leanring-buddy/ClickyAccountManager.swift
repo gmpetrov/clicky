@@ -167,7 +167,7 @@ final class ClickyAccountManager: ObservableObject {
             }
 
             guard (200...299).contains(httpResponse.statusCode) else {
-                throw parseBackendError(from: data, fallbackMessage: "Clicky could not start desktop sign-in.")
+                throw parseBackendError(from: data, fallbackMessage: "Pointerly could not start desktop sign-in.")
             }
 
             let deviceCodeResponse = try jsonDecoder.decode(DeviceCodeResponse.self, from: data)
@@ -226,13 +226,13 @@ final class ClickyAccountManager: ObservableObject {
                         pendingDeviceUserCode = nil
                         pendingVerificationURL = nil
                         isAuthenticatingDevice = false
-                        currentErrorMessage = "That desktop sign-in code expired. Start again from Clicky."
+                        currentErrorMessage = "That desktop sign-in code expired. Start again from Pointerly."
                         return
                     case .invalidGrant:
                         pendingDeviceUserCode = nil
                         pendingVerificationURL = nil
                         isAuthenticatingDevice = false
-                        currentErrorMessage = "Clicky could not complete desktop sign-in."
+                        currentErrorMessage = "Pointerly could not complete desktop sign-in."
                         return
                     }
                 } catch {
@@ -313,7 +313,7 @@ final class ClickyAccountManager: ObservableObject {
             }
 
             guard (200...299).contains(httpResponse.statusCode) else {
-                throw parseBackendError(from: data, fallbackMessage: "Clicky could not refresh your account.")
+                throw parseBackendError(from: data, fallbackMessage: "Pointerly could not refresh your account.")
             }
 
             let desktopAccountResponse = try jsonDecoder.decode(DesktopAccountResponse.self, from: data)
@@ -381,7 +381,7 @@ private enum ClickyAccountManagerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "Clicky received an invalid response from the web app."
+            return "Pointerly received an invalid response from the web app."
         case .backend(let message):
             return message
         }

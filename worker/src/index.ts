@@ -1,5 +1,5 @@
 /**
- * Clicky Proxy Worker
+ * Pointerly Proxy Worker
  *
  * Proxies requests to OpenRouter, ElevenLabs, and AssemblyAI so the app never
  * ships with raw API keys. Keys are stored as Cloudflare secrets.
@@ -103,7 +103,7 @@ async function handleChat(
       authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
       "content-type": "application/json",
       "http-referer": env.CLICKY_APP_URL,
-      "x-title": "Clicky",
+      "x-title": "Pointerly",
     },
     body: upstreamRequestBody,
   });
@@ -259,7 +259,7 @@ async function verifyDesktopEntitlement(
       errorResponse: new Response(
         JSON.stringify({
           error: "missing_authorization",
-          message: "A desktop access token is required before using Clicky.",
+          message: "A desktop access token is required before using Pointerly.",
         }),
         {
           status: 401,
@@ -284,7 +284,7 @@ async function verifyDesktopEntitlement(
       errorResponse: new Response(
         JSON.stringify({
           error: "invalid_session",
-          message: "Your Clicky session has expired. Please sign in again from the desktop app.",
+          message: "Your Pointerly session has expired. Please sign in again from the desktop app.",
         }),
         {
           status: 401,
@@ -306,7 +306,7 @@ async function verifyDesktopEntitlement(
       errorResponse: new Response(
         JSON.stringify({
           error: "entitlement_lookup_failed",
-          message: "Clicky could not verify your subscription right now.",
+          message: "Pointerly could not verify your subscription right now.",
         }),
         {
           status: 502,
@@ -325,7 +325,7 @@ async function verifyDesktopEntitlement(
       errorResponse: new Response(
         JSON.stringify({
           error: "not_authenticated",
-          message: "Please sign in to your Clicky account before using the desktop app.",
+          message: "Please sign in to your Pointerly account before using the desktop app.",
         }),
         {
           status: 401,
@@ -342,7 +342,7 @@ async function verifyDesktopEntitlement(
       errorResponse: new Response(
         JSON.stringify({
           error: "subscription_required",
-          message: "An active Clicky Starter subscription is required before using the AI worker.",
+          message: "An active Pointerly Starter subscription is required before using the AI worker.",
         }),
         {
           status: 402,

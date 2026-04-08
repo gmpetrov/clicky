@@ -38,7 +38,7 @@ export default function DevicePage() {
       <section className="auth-panel">
         <h1>Connect your Mac</h1>
         <p className="auth-copy">
-          Enter the code shown in the Clicky menu bar app.
+          Enter the code shown in the Pointerly menu bar app.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>

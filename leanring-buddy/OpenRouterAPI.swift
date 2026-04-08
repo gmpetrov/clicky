@@ -227,9 +227,9 @@ private enum OpenRouterAPIError: CustomNSError, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingDesktopAccessToken:
-            return "Sign in to Clicky before asking the desktop companion to use the AI worker."
+            return "Sign in to Pointerly before asking the desktop companion to use the AI worker."
         case .invalidResponse:
-            return "Clicky received an invalid response from the AI worker."
+            return "Pointerly received an invalid response from the AI worker."
         case .apiError(let statusCode, let body):
             return "AI worker error (\(statusCode)): \(body)"
         }

@@ -64,7 +64,7 @@ export function DeviceApprovePageContent({ userCode }: DeviceApprovePageContentP
       <section className="auth-panel">
         <h1>Approve this device?</h1>
         <p className="auth-copy">
-          The Clicky desktop app wants to connect to your account.
+          The Pointerly desktop app wants to connect to your account.
         </p>
 
         <div className="device-approval-card">

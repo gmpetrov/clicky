@@ -17,3 +17,5 @@ releases/
 coding-plans/
 
 /generated/prisma
+
+worker/.wrangler/

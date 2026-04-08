@@ -20,7 +20,7 @@ const displayFont = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Clicky",
+  title: "Pointerly",
   description: "A paid desktop AI companion with a premium web onboarding and billing flow.",
 };
 
@@ -37,7 +37,7 @@ export default function RootLayout({
           <div className="site-gradient site-gradient-bottom" />
           <header className="site-header">
             <Link href="/" className="site-logo">
-              Clicky
+              Pointerly
             </Link>
             <nav className="site-nav">
               <Link href="/pricing">Pricing</Link>

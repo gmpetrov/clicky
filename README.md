@@ -1,13 +1,13 @@
-# Hi, this is Clicky.
+# Hi, this is Pointerly.
 It's an AI teacher that lives as a buddy next to your cursor. It can see your screen, talk to you, and even point at stuff. Kinda like having a real teacher next to you.
 
-Download it [here](https://www.clicky.so/) for free.
+Download it [here](https://www.pointerly.xyz/) for free.
 
 Here's the [original tweet](https://x.com/FarzaTV/status/2041314633978659092) that kinda blew up for a demo for more context.
 
-![Clicky — an ai buddy that lives on your mac](clicky-demo.gif)
+![Pointerly — an ai buddy that lives on your mac](clicky-demo.gif)
 
-This is the open-source version of Clicky for those that want to hack on it, build their own features, or just see how it works under the hood.
+This is the open-source version of Pointerly for those that want to hack on it, build their own features, or just see how it works under the hood.
 
 The repo now includes:
 
@@ -29,7 +29,7 @@ Hi Claude.
 
 Clone https://github.com/farzaa/clicky.git into my current directory.
 
-Then read the CLAUDE.md. I want to get Clicky running locally on my Mac.
+Then read the CLAUDE.md. I want to get Pointerly running locally on my Mac.
 
 Help me set up everything — the Cloudflare Worker with my own API keys, the proxy URLs, and getting it building in Xcode. Walk me through it.
 ```
