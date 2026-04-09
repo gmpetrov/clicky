@@ -168,7 +168,7 @@ npx wrangler deploy
 npx wrangler dev
 ```
 
-The repo root `.env` now contains the local Next.js, Prisma, Stripe, OpenRouter, ElevenLabs, AssemblyAI, usage metering secret, local provider-cost assumptions used for cost aggregation, and optional desktop release metadata env vars (`CLICKY_DESKTOP_LATEST_VERSION`, `CLICKY_DESKTOP_LATEST_BUILD_NUMBER`, `CLICKY_DESKTOP_LATEST_DOWNLOAD_URL`, `CLICKY_DESKTOP_MINIMUM_SUPPORTED_VERSION`). `worker/.dev.vars` should mirror the Worker secrets plus `CLICKY_APP_URL` for local development.
+The repo root `.env` now contains the local Next.js, Prisma, Stripe, OpenRouter, ElevenLabs, AssemblyAI, usage metering secret, local provider-cost assumptions used for cost aggregation, optional managed Postgres TLS CA material via `DATABASE_CA_CERT`, and optional desktop release metadata env vars (`CLICKY_DESKTOP_LATEST_VERSION`, `CLICKY_DESKTOP_LATEST_BUILD_NUMBER`, `CLICKY_DESKTOP_LATEST_DOWNLOAD_URL`, `CLICKY_DESKTOP_MINIMUM_SUPPORTED_VERSION`). `worker/.dev.vars` should mirror the Worker secrets plus `CLICKY_APP_URL` for local development.
 The local Worker dev server is pinned to port `8787` because the macOS app reads that fixed base URL from `Info.plist` during development.
 
 ## Code Style & Conventions

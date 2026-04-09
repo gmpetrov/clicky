@@ -6,6 +6,7 @@ import { publicEnv } from "@/lib/public-env";
 
 const serverEnvironmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  DATABASE_CA_CERT: z.string().min(1).optional(),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url(),
   CLICKY_DESKTOP_CLIENT_ID: z.string().min(1),
@@ -29,6 +30,7 @@ const serverEnvironmentSchema = z.object({
 
 export const serverEnv = serverEnvironmentSchema.parse({
   DATABASE_URL: process.env.DATABASE_URL,
+  DATABASE_CA_CERT: process.env.DATABASE_CA_CERT,
   BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
   BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
   CLICKY_DESKTOP_CLIENT_ID: process.env.CLICKY_DESKTOP_CLIENT_ID,
