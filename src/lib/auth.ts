@@ -58,6 +58,13 @@ export const auth = betterAuth({
         authorizeReference: async ({ user, referenceId }) => {
           return referenceId === user.id;
         },
+        getCheckoutSessionParams: async () => {
+          return {
+            params: {
+              allow_promotion_codes: true,
+            },
+          };
+        },
       },
     }),
     nextCookies(),

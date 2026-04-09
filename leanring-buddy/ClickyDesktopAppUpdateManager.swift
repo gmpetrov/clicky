@@ -7,6 +7,7 @@
 //
 
 import AppKit
+import Combine
 import Foundation
 
 @MainActor
@@ -21,11 +22,11 @@ final class ClickyDesktopAppUpdateManager: ObservableObject {
         let isRequired: Bool
 
         var currentVersionDisplayText: String {
-            displayVersion(version: currentVersion, buildNumber: currentBuildNumber)
+            Self.displayVersion(version: currentVersion, buildNumber: currentBuildNumber)
         }
 
         var latestVersionDisplayText: String {
-            displayVersion(version: latestVersion, buildNumber: latestBuildNumber)
+            Self.displayVersion(version: latestVersion, buildNumber: latestBuildNumber)
         }
 
         static func displayVersion(version: String, buildNumber: String?) -> String {
