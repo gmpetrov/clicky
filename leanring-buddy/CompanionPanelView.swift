@@ -13,6 +13,7 @@ import SwiftUI
 struct CompanionPanelView: View {
     @ObservedObject var companionManager: CompanionManager
     @ObservedObject var clickyAccountManager: ClickyAccountManager
+    @ObservedObject var clickyDesktopAppUpdateManager: ClickyDesktopAppUpdateManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,6 +25,14 @@ struct CompanionPanelView: View {
             permissionsCopySection
                 .padding(.top, 16)
                 .padding(.horizontal, 16)
+
+            if clickyDesktopAppUpdateManager.availableDesktopAppUpdate != nil {
+                Spacer()
+                    .frame(height: 16)
+
+                desktopUpdateSection
+                    .padding(.horizontal, 16)
+            }
 
             Spacer()
                 .frame(height: 16)
@@ -202,6 +211,62 @@ struct CompanionPanelView: View {
     }
 
     // MARK: - Desktop Access
+
+    @ViewBuilder
+    private var desktopUpdateSection: some View {
+        if let availableDesktopAppUpdate = clickyDesktopAppUpdateManager.availableDesktopAppUpdate {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(availableDesktopAppUpdate.isRequired ? "UPDATE REQUIRED" : "UPDATE AVAILABLE")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundColor(DS.Colors.textTertiary)
+
+                Text(availableDesktopAppUpdate.isRequired
+                     ? "Pointerly \(availableDesktopAppUpdate.latestVersionDisplayText) is required to keep the desktop app in sync."
+                     : "Pointerly \(availableDesktopAppUpdate.latestVersionDisplayText) is ready to download.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+
+                Text("You're on \(availableDesktopAppUpdate.currentVersionDisplayText).")
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.textTertiary)
+
+                HStack(spacing: 8) {
+                    Button(action: {
+                        clickyDesktopAppUpdateManager.openDownloadPage()
+                    }) {
+                        Text("Download Update")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(DS.Colors.textOnAccent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(DS.Colors.accent)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+
+                    secondaryActionButton(
+                        title: clickyDesktopAppUpdateManager.isCheckingForDesktopAppUpdate ? "Checking..." : "Check Again"
+                    ) {
+                        clickyDesktopAppUpdateManager.refreshAvailableUpdate()
+                    }
+                    .disabled(clickyDesktopAppUpdateManager.isCheckingForDesktopAppUpdate)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+                    .stroke(DS.Colors.borderSubtle, lineWidth: 0.5)
+            )
+        }
+    }
 
     private var desktopAccessSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -801,37 +866,78 @@ struct CompanionPanelView: View {
     // MARK: - Footer
 
     private var footerSection: some View {
-        HStack {
-            Button(action: {
-                NSApp.terminate(nil)
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "power")
-                        .font(.system(size: 11, weight: .medium))
-                    Text("Quit Pointerly")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundColor(DS.Colors.textTertiary)
-            }
-            .buttonStyle(.plain)
-            .pointerCursor()
-
-            if companionManager.hasCompletedOnboarding && clickyAccountManager.hasActiveSubscription {
-                Spacer()
-
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 Button(action: {
-                    companionManager.replayOnboarding()
+                    clickyDesktopAppUpdateManager.refreshAvailableUpdate()
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "play.circle")
+                        Image(systemName: "arrow.down.circle")
                             .font(.system(size: 11, weight: .medium))
-                        Text("Watch Onboarding Again")
+                        Text(
+                            clickyDesktopAppUpdateManager.isCheckingForDesktopAppUpdate
+                                ? "Checking..."
+                                : "Check for Updates"
+                        )
                             .font(.system(size: 12, weight: .medium))
                     }
                     .foregroundColor(DS.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .pointerCursor()
+                .disabled(clickyDesktopAppUpdateManager.isCheckingForDesktopAppUpdate)
+
+                Spacer()
+
+                Text("v\(clickyDesktopAppUpdateManager.currentInstalledVersionDisplayText)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+
+            if let currentErrorMessage = clickyDesktopAppUpdateManager.currentErrorMessage {
+                Text(currentErrorMessage)
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let currentStatusMessage = clickyDesktopAppUpdateManager.currentStatusMessage {
+                Text(currentStatusMessage)
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                Button(action: {
+                    NSApp.terminate(nil)
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "power")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("Quit Pointerly")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(DS.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .pointerCursor()
+
+                if companionManager.hasCompletedOnboarding && clickyAccountManager.hasActiveSubscription {
+                    Spacer()
+
+                    Button(action: {
+                        companionManager.replayOnboarding()
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.circle")
+                                .font(.system(size: 11, weight: .medium))
+                            Text("Watch Onboarding Again")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(DS.Colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                }
             }
         }
     }

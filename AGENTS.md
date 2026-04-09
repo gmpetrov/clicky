@@ -63,6 +63,8 @@ Worker vars: `ELEVENLABS_VOICE_ID`, `CLICKY_APP_URL`
 
 **Usage Ledger + Period Summary**: Cost tracking is split into two tables. `usageEvent` stores immutable per-call usage rows with raw usage fields and computed cost, while `usagePeriodSummary` keeps the running total for the active subscription period. This makes backfills and recalculations possible later without losing the original usage basis.
 
+**Desktop Update Checks**: The macOS app checks a public Next.js release metadata endpoint on launch and from the panel footer. If the installed version is behind the latest published release, the panel shows an update banner and opens the S3 DMG download directly.
+
 **Transient Cursor Mode**: When "Show Pointerly" is off, pressing the hotkey fades in the cursor overlay for the duration of the interaction (recording → response → TTS → optional pointing), then fades it out automatically after 1 second of inactivity.
 
 ## Key Files
@@ -70,10 +72,11 @@ Worker vars: `ELEVENLABS_VOICE_ID`, `CLICKY_APP_URL`
 | File | Lines | Purpose |
 |------|-------|---------|
 | `leanring_buddyApp.swift` | ~89 | Menu bar app entry point. Uses `@NSApplicationDelegateAdaptor` with `CompanionAppDelegate` which creates `MenuBarPanelManager` and starts `CompanionManager`. No main window — the app lives entirely in the status bar. |
-| `CompanionManager.swift` | ~1147 | Central state machine. Owns dictation, desktop entitlement gating, shortcut monitoring, screen capture, OpenRouter requests, ElevenLabs TTS, and overlay management. Tracks voice state, conversation history, model selection, cursor visibility, and whether the signed-in account is allowed to use the desktop assistant. |
+| `CompanionManager.swift` | ~1175 | Central state machine. Owns dictation, desktop entitlement gating, shortcut monitoring, screen capture, OpenRouter requests, ElevenLabs TTS, overlay management, and launch-time desktop update checks. Tracks voice state, conversation history, model selection, cursor visibility, and whether the signed-in account is allowed to use the desktop assistant. |
 | `MenuBarPanelManager.swift` | ~259 | NSStatusItem + custom NSPanel lifecycle. Creates the menu bar icon, manages the floating companion panel, installs click-outside-to-dismiss monitoring, and now listens for notifications that reopen the panel when the user hits the paywall from the hotkey path. |
-| `CompanionPanelView.swift` | ~908 | SwiftUI menu bar panel UI. Shows account state, device login prompts, subscription/paywall actions, permissions UI, model picker, onboarding start, and quit/replay controls using the existing design system. |
+| `CompanionPanelView.swift` | ~1014 | SwiftUI menu bar panel UI. Shows account state, desktop update state, device login prompts, subscription/paywall actions, permissions UI, model picker, onboarding start, and quit/replay controls using the existing design system. |
 | `ClickyAccountManager.swift` | ~388 | Native auth and billing state manager. Starts the Better Auth device flow, polls for bearer tokens, stores them in Keychain, refreshes account/subscription status from the Next.js backend, and opens pricing/dashboard links in the browser. |
+| `ClickyDesktopAppUpdateManager.swift` | ~290 | Native desktop update checker. Fetches the latest macOS release metadata from the Next.js app, compares the installed version/build, and exposes update availability plus the S3 download URL to the panel UI. |
 | `ClickyDesktopSessionStore.swift` | ~84 | Keychain helper for the desktop bearer token used by the Better Auth device flow and Worker authorization. |
 | `ClickyUsageMeteringClient.swift` | ~70 | Native background reporter for AssemblyAI metering. Posts authenticated usage events back to the Next.js `/api/desktop/usage-events` route using the desktop bearer token. |
 | `OverlayWindow.swift` | ~881 | Full-screen transparent overlay hosting the blue cursor, response text, waveform, and spinner. Handles cursor animation, element pointing with bezier arcs, multi-monitor coordinate mapping, and fade-out transitions. |
@@ -99,6 +102,8 @@ Worker vars: `ELEVENLABS_VOICE_ID`, `CLICKY_APP_URL`
 | `src/app/page.tsx` | ~60 | Minimal marketing landing page. Centered hero, feature grid, pricing section, and the BlueCursorFollower effect that replicates the desktop cursor companion in the browser. |
 | `src/components/blue-cursor-follower.tsx` | ~120 | Client component that renders a blue triangle cursor following the user's mouse with spring physics on a fixed canvas overlay, mirroring the desktop app's cursor companion. |
 | `src/app/dashboard/page.tsx` | ~120 | Protected dashboard route. Apple-like single-column layout showing account status, subscription, device connection, access checklist, and billing actions. |
+| `src/app/api/desktop/app-update/route.ts` | ~12 | Public desktop update metadata endpoint. Returns the latest published macOS version, optional build floor, and the direct S3 download URL used by the menu bar app. |
+| `src/lib/desktop-app-update.ts` | ~42 | Server-side release manifest helper for desktop updates. Reads the latest macOS release metadata from environment variables and falls back to the canonical S3 naming scheme. |
 | `src/components/ui/button.tsx` | ~65 | shadcn button primitive generated from the preset. Used for dashboard actions and future web app controls. |
 | `src/components/ui/card.tsx` | ~100 | shadcn card primitive generated from the preset. Forms the structural building block for the dashboard layout. |
 | `src/components/ui/badge.tsx` | ~49 | shadcn badge primitive for entitlement, plan, and section status labels in the dashboard. |
@@ -163,7 +168,7 @@ npx wrangler deploy
 npx wrangler dev
 ```
 
-The repo root `.env` now contains the local Next.js, Prisma, Stripe, OpenRouter, ElevenLabs, AssemblyAI, usage metering secret, and local provider-cost assumptions used for cost aggregation. `worker/.dev.vars` should mirror the Worker secrets plus `CLICKY_APP_URL` for local development.
+The repo root `.env` now contains the local Next.js, Prisma, Stripe, OpenRouter, ElevenLabs, AssemblyAI, usage metering secret, local provider-cost assumptions used for cost aggregation, and optional desktop release metadata env vars (`CLICKY_DESKTOP_LATEST_VERSION`, `CLICKY_DESKTOP_LATEST_BUILD_NUMBER`, `CLICKY_DESKTOP_LATEST_DOWNLOAD_URL`, `CLICKY_DESKTOP_MINIMUM_SUPPORTED_VERSION`). `worker/.dev.vars` should mirror the Worker secrets plus `CLICKY_APP_URL` for local development.
 The local Worker dev server is pinned to port `8787` because the macOS app reads that fixed base URL from `Info.plist` during development.
 
 ## Code Style & Conventions

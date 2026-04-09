@@ -159,7 +159,8 @@ final class MenuBarPanelManager: NSObject {
     private func createPanel() {
         let companionPanelView = CompanionPanelView(
             companionManager: companionManager,
-            clickyAccountManager: companionManager.clickyAccountManager
+            clickyAccountManager: companionManager.clickyAccountManager,
+            clickyDesktopAppUpdateManager: companionManager.clickyDesktopAppUpdateManager
         )
             .frame(width: panelWidth)
 

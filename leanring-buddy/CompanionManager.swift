@@ -67,6 +67,7 @@ final class CompanionManager: ObservableObject {
 
     let buddyDictationManager = BuddyDictationManager()
     let clickyAccountManager = ClickyAccountManager()
+    let clickyDesktopAppUpdateManager = ClickyDesktopAppUpdateManager()
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
     // Response text is now displayed inline on the cursor overlay via
@@ -201,6 +202,7 @@ final class CompanionManager: ObservableObject {
         bindShortcutTransitions()
         bindDesktopAccessObservation()
         clickyAccountManager.restoreStoredSessionIfNeeded()
+        clickyDesktopAppUpdateManager.checkForUpdatesOnLaunch()
         // Eagerly touch the OpenRouter API so its TLS warmup handshake completes
         // well before the onboarding demo fires at ~40s into the video.
         _ = openRouterAPI
