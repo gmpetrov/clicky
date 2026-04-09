@@ -130,6 +130,14 @@ final class ClickyAccountManager: ObservableObject {
         NSWorkspace.shared.open(pendingVerificationURL)
     }
 
+    func copyPendingDeviceUserCodeToClipboard() {
+        guard let pendingDeviceUserCode else { return }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(pendingDeviceUserCode, forType: .string)
+    }
+
     func openPricingPage() {
         NSWorkspace.shared.open(webBaseURL.appending(path: "pricing"))
     }

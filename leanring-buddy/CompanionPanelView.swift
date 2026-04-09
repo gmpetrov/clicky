@@ -14,6 +14,7 @@ struct CompanionPanelView: View {
     @ObservedObject var companionManager: CompanionManager
     @ObservedObject var clickyAccountManager: ClickyAccountManager
     @ObservedObject var clickyDesktopAppUpdateManager: ClickyDesktopAppUpdateManager
+    @State private var copiedPendingDeviceUserCode: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -282,14 +283,29 @@ struct CompanionPanelView: View {
 
                     if let pendingDeviceUserCode = clickyAccountManager.pendingDeviceUserCode {
                         HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Your device code")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(DS.Colors.textTertiary)
-                                Text(pendingDeviceUserCode)
-                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                    .foregroundColor(DS.Colors.textPrimary)
+                            Button(action: {
+                                clickyAccountManager.copyPendingDeviceUserCodeToClipboard()
+                                copiedPendingDeviceUserCode = pendingDeviceUserCode
+
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    if copiedPendingDeviceUserCode == pendingDeviceUserCode {
+                                        copiedPendingDeviceUserCode = nil
+                                    }
+                                }
+                            }) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(copiedPendingDeviceUserCode == pendingDeviceUserCode ? "Copied" : "Your device code")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(DS.Colors.textTertiary)
+                                    Text(pendingDeviceUserCode)
+                                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                        .foregroundColor(DS.Colors.textPrimary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .pointerCursor()
 
                             Spacer()
 
@@ -363,7 +379,7 @@ struct CompanionPanelView: View {
                     }
 
                     HStack(spacing: 8) {
-                        secondaryActionButton(title: "Upgrade") {
+                        secondaryActionButton(title: "Upgrade", usesAccentFill: true) {
                             clickyAccountManager.openPricingPage()
                         }
                         secondaryActionButton(title: "Refresh") {
@@ -996,16 +1012,27 @@ struct CompanionPanelView: View {
         }
     }
 
-    private func secondaryActionButton(title: String, action: @escaping () -> Void) -> some View {
+    private func secondaryActionButton(
+        title: String,
+        usesAccentFill: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(DS.Colors.textSecondary)
+                .foregroundColor(usesAccentFill ? DS.Colors.textOnAccent : DS.Colors.textSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
-                        .stroke(DS.Colors.borderSubtle, lineWidth: 0.8)
+                        .fill(usesAccentFill ? DS.Colors.accent : Color.clear)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(
+                            usesAccentFill ? DS.Colors.accent : DS.Colors.borderSubtle,
+                            lineWidth: 0.8
+                        )
                 )
         }
         .buttonStyle(.plain)
