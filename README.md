@@ -15,6 +15,7 @@ The repo now includes:
 - PostgreSQL + Prisma for auth and subscription data
 - Better Auth for email/password auth, optional Google auth, bearer tokens, and device login
 - Stripe billing using the existing Starter monthly plan
+- Optional Meta Pixel tracking for web page views plus sign-up and checkout funnel events
 - A Cloudflare Worker that proxies OpenRouter, ElevenLabs, and AssemblyAI after validating the desktop bearer token and active subscription
 - Usage metering that writes per-call AI cost events and billing-period summaries into PostgreSQL for future dashboard/reporting work
 
@@ -66,6 +67,7 @@ The root `.env` should contain the local values for:
 - `BETTER_AUTH_URL`
 - `NEXT_PUBLIC_APP_URL`
 - `CLICKY_WORKER_BASE_URL`
+- `NEXT_PUBLIC_META_PIXEL_ID`
 - `CLICKY_DESKTOP_CLIENT_ID`
 - `USAGE_METERING_SECRET`
 - `STRIPE_SECRET_KEY`
@@ -84,6 +86,7 @@ The root `.env` should contain the local values for:
 - `GOOGLE_CLIENT_SECRET`
 
 If you want Google auth on the web, set real Google OAuth credentials and flip `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`.
+If you want Meta Pixel on the web app, set `NEXT_PUBLIC_META_PIXEL_ID` to your pixel ID. Leave it unset to disable tracking.
 
 ### 2. Run the web app
 

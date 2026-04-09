@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { authClient, clearStoredBearerToken } from "@/lib/auth-client";
+import { publicEnv } from "@/lib/public-env";
+import { initiateCheckout } from "@/lib/meta-pixel";
 
 type BillingActionsProps = {
   hasActiveSubscription: boolean;
@@ -17,6 +19,7 @@ export function BillingActions({
   currentSubscriptionStatus,
 }: BillingActionsProps) {
   const router = useRouter();
+  const authSession = authClient.useSession();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
@@ -25,6 +28,13 @@ export function BillingActions({
   async function handleCheckout() {
     setErrorMessage(null);
     setIsLoadingCheckout(true);
+
+    initiateCheckout({
+      emailAddress: authSession.data?.user?.email,
+      externalUserId: authSession.data?.user?.id,
+      planName: currentPlanName,
+      value: publicEnv.NEXT_PUBLIC_CLICKY_PRICE_MONTHLY,
+    });
 
     const { error } = await authClient.subscription.upgrade({
       plan: "starter",

@@ -3,6 +3,8 @@ import { Instrument_Sans, Space_Grotesk, Inter, Geist } from "next/font/google";
 import Link from "next/link";
 
 import "@/app/globals.css";
+import { MetaPixel } from "@/components/meta-pixel";
+import { publicEnv } from "@/lib/public-env";
 import { cn } from "@/lib/utils";
 
 const geistHeading = Geist({subsets:['latin'],variable:'--font-heading'});
@@ -50,6 +52,9 @@ export default function RootLayout({
           </header>
           {children}
         </div>
+        {publicEnv.NEXT_PUBLIC_META_PIXEL_ID ? (
+          <MetaPixel pixelId={publicEnv.NEXT_PUBLIC_META_PIXEL_ID} />
+        ) : null}
       </body>
     </html>
   );

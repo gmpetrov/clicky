@@ -30,6 +30,7 @@ AI provider keys live on the Cloudflare Worker. Auth and billing secrets live se
 - **Desktop Auth Flow**: The macOS app requests a Better Auth device code, opens the browser to approve it, stores the returned bearer token in Keychain, and reuses that token for dashboard and worker access
 - **Paywall Enforcement**: The macOS panel blocks usage when the user is signed out or unsubscribed. The Worker also validates the bearer token against the Next.js entitlement endpoint before proxying AI requests
 - **Usage Metering**: OpenRouter and ElevenLabs usage is recorded from the Worker, while AssemblyAI streaming usage is reported from the macOS app after websocket termination. The Next.js app stores an append-only usage ledger plus billing-period cost summaries in PostgreSQL for later dashboard/reporting work.
+- **Web Analytics**: Optional Meta Pixel on the Next.js surface tracks page views plus sign-up and checkout funnel events when `NEXT_PUBLIC_META_PIXEL_ID` is configured
 - **Element Pointing**: The model embeds `[POINT:x,y:label:screenN]` tags in responses. The overlay parses these, maps coordinates to the correct monitor, and animates the blue cursor along a bezier arc to the target.
 - **Concurrency**: `@MainActor` isolation, async/await throughout
 - **Analytics**: PostHog via `ClickyAnalytics.swift`
@@ -101,9 +102,11 @@ Worker vars: `ELEVENLABS_VOICE_ID`, `CLICKY_APP_URL`
 | `src/lib/usage-metering.ts` | ~360 | Shared usage-ingestion and aggregation logic. Validates worker/desktop metering payloads, resolves the active billing period, computes provider costs, writes immutable usage rows, and upserts period summaries. |
 | `src/app/page.tsx` | ~60 | Minimal marketing landing page. Centered hero, feature grid, pricing section, and the BlueCursorFollower effect that replicates the desktop cursor companion in the browser. |
 | `src/components/blue-cursor-follower.tsx` | ~120 | Client component that renders a blue triangle cursor following the user's mouse with spring physics on a fixed canvas overlay, mirroring the desktop app's cursor companion. |
+| `src/components/meta-pixel.tsx` | ~62 | Client-side Meta Pixel loader for the Next.js app. Injects the local pixel bootstrap, waits for auth session resolution, and sends `PageView` events on App Router navigation. |
 | `src/app/dashboard/page.tsx` | ~120 | Protected dashboard route. Apple-like single-column layout showing account status, subscription, device connection, access checklist, and billing actions. |
 | `src/app/api/desktop/app-update/route.ts` | ~12 | Public desktop update metadata endpoint. Returns the latest published macOS version, optional build floor, and the direct S3 download URL used by the menu bar app. |
 | `src/lib/desktop-app-update.ts` | ~42 | Server-side release manifest helper for desktop updates. Reads the latest macOS release metadata from environment variables and falls back to the canonical S3 naming scheme. |
+| `src/lib/meta-pixel.ts` | ~162 | Shared Meta Pixel helpers for the Next.js app. Initializes the pixel with optional advanced matching data and emits `PageView`, `CompleteRegistration`, and `InitiateCheckout` events. |
 | `src/components/ui/button.tsx` | ~65 | shadcn button primitive generated from the preset. Used for dashboard actions and future web app controls. |
 | `src/components/ui/card.tsx` | ~100 | shadcn card primitive generated from the preset. Forms the structural building block for the dashboard layout. |
 | `src/components/ui/badge.tsx` | ~49 | shadcn badge primitive for entitlement, plan, and section status labels in the dashboard. |
@@ -116,6 +119,7 @@ Worker vars: `ELEVENLABS_VOICE_ID`, `CLICKY_APP_URL`
 | `prisma/schema.prisma` | ~156 | Prisma schema for Better Auth, Stripe subscriptions, immutable usage events, and billing-period usage summaries. |
 | `proxy.ts` | ~16 | Next.js 16 proxy that performs optimistic cookie checks before allowing `/dashboard` requests through. |
 | `worker/src/index.ts` | ~500 | Cloudflare Worker proxy. Three routes: `/chat` (OpenRouter), `/tts` (ElevenLabs), `/transcribe-token` (AssemblyAI temp token). Every route verifies the desktop bearer token and subscription entitlement against the Next.js backend before proxying upstream, and chat/TTS usage is posted back to the web app for billing-period cost tracking. |
+| `public/scripts/meta-pixel.js` | ~23 | Local Meta Pixel bootstrap served by the Next.js app. Loads `fbevents.js` and defines the `fbq` queue before the web analytics helper initializes the configured pixel. |
 
 ## Build & Run
 
@@ -168,7 +172,7 @@ npx wrangler deploy
 npx wrangler dev
 ```
 
-The repo root `.env` now contains the local Next.js, Prisma, Stripe, OpenRouter, ElevenLabs, AssemblyAI, usage metering secret, local provider-cost assumptions used for cost aggregation, optional managed Postgres TLS CA material via `DATABASE_CA_CERT`, and optional desktop release metadata env vars (`CLICKY_DESKTOP_LATEST_VERSION`, `CLICKY_DESKTOP_LATEST_BUILD_NUMBER`, `CLICKY_DESKTOP_LATEST_DOWNLOAD_URL`, `CLICKY_DESKTOP_MINIMUM_SUPPORTED_VERSION`). `worker/.dev.vars` should mirror the Worker secrets plus `CLICKY_APP_URL` for local development.
+The repo root `.env` now contains the local Next.js, Prisma, Stripe, OpenRouter, ElevenLabs, AssemblyAI, usage metering secret, local provider-cost assumptions used for cost aggregation, optional Meta Pixel web analytics via `NEXT_PUBLIC_META_PIXEL_ID`, optional managed Postgres TLS CA material via `DATABASE_CA_CERT`, and optional desktop release metadata env vars (`CLICKY_DESKTOP_LATEST_VERSION`, `CLICKY_DESKTOP_LATEST_BUILD_NUMBER`, `CLICKY_DESKTOP_LATEST_DOWNLOAD_URL`, `CLICKY_DESKTOP_MINIMUM_SUPPORTED_VERSION`). `worker/.dev.vars` should mirror the Worker secrets plus `CLICKY_APP_URL` for local development.
 The local Worker dev server is pinned to port `8787` because the macOS app reads that fixed base URL from `Info.plist` during development.
 
 ## Code Style & Conventions

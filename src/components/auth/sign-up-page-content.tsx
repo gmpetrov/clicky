@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { completeRegistration } from "@/lib/meta-pixel";
 
 type SignUpPageContentProps = {
   callbackURL: string;
@@ -36,6 +37,10 @@ export function SignUpPageContent({ callbackURL }: SignUpPageContentProps) {
       setErrorMessage(error.message ?? "Unable to create your account right now.");
       return;
     }
+
+    completeRegistration({
+      emailAddress,
+    });
 
     router.push(callbackURL);
     router.refresh();
