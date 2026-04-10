@@ -13,7 +13,10 @@ const features = [
 export default function HomePage() {
   return (
     <main className="landing-main">
-      <BlueCursorFollower />
+      <BlueCursorFollower
+        introLabel="i'm pointerly. start right here."
+        introTargetSelector='[data-pointerly-primary-cta]'
+      />
 
       <section className="landing-hero">
         <h1 className="landing-headline">
@@ -30,6 +33,7 @@ export default function HomePage() {
             href="/sign-up?next=/dashboard"
             className="primary-button"
             aria-label="Create your Pointerly account"
+            data-pointerly-primary-cta="true"
             style={{
               background: '#040404',
               boxShadow: '0 16px 40px rgba(17, 17, 17, 0.18)',
