@@ -20,6 +20,7 @@ const INTRO_LABEL_FONT_SIZE_PX = 13;
 const INTRO_LABEL_CHARACTER_DELAY_MIN_MS = 30;
 const INTRO_LABEL_CHARACTER_DELAY_MAX_MS = 60;
 const INTRO_SEQUENCE_HANDOFF_DELAY_MS = 1200;
+const INTRO_TOUCH_DEVICE_HOLD_MS = 2200;
 const CTA_CURSOR_HORIZONTAL_POSITION = 0.55;
 const CTA_CURSOR_VERTICAL_OFFSET_PX = 10;
 
@@ -85,9 +86,9 @@ export function BlueCursorFollower({
   const [visibleBubbleText, setVisibleBubbleText] = useState("");
 
   useEffect(() => {
-    if (!window.matchMedia("(pointer: fine)").matches) {
-      return;
-    }
+    const browserSupportsFinePointer =
+      window.matchMedia("(pointer: fine)").matches &&
+      window.matchMedia("(hover: hover)").matches;
 
     const sceneElement = sceneElementRef.current;
     const cursorElement = cursorElementRef.current;
@@ -141,6 +142,25 @@ export function BlueCursorFollower({
       renderScene();
     };
 
+    const getCurrentIntroDestination = (): Point | null => {
+      const introTargetElement = document.querySelector<HTMLElement>(
+        introTargetSelector
+      );
+
+      if (!introTargetElement) {
+        return null;
+      }
+
+      const targetBounds = introTargetElement.getBoundingClientRect();
+
+      return {
+        x:
+          targetBounds.left +
+          targetBounds.width * CTA_CURSOR_HORIZONTAL_POSITION,
+        y: targetBounds.bottom - CTA_CURSOR_VERTICAL_OFFSET_PX,
+      };
+    };
+
     const handOffToRecordedMouseTarget = () => {
       const recordedMouseTarget = latestMouseTargetDuringIntro.current;
 
@@ -175,9 +195,17 @@ export function BlueCursorFollower({
           renderScene();
 
           introHandoffTimeoutId.current = window.setTimeout(() => {
+            if (browserSupportsFinePointer) {
+              introHasCompleted.current = true;
+              handOffToRecordedMouseTarget();
+              return;
+            }
+
+            bubbleOpacity.current = 0;
+            isVisible.current = false;
             introHasCompleted.current = true;
-            handOffToRecordedMouseTarget();
-          }, INTRO_SEQUENCE_HANDOFF_DELAY_MS);
+            renderScene();
+          }, browserSupportsFinePointer ? INTRO_SEQUENCE_HANDOFF_DELAY_MS : INTRO_TOUCH_DEVICE_HOLD_MS);
           return;
         }
 
@@ -206,22 +234,11 @@ export function BlueCursorFollower({
     };
 
     const beginDesktopStyleIntroFlight = () => {
-      const introTargetElement = document.querySelector<HTMLElement>(
-        introTargetSelector
-      );
-
-      if (!introTargetElement) {
+      const introDestination = getCurrentIntroDestination();
+      if (!introDestination) {
         introHasCompleted.current = true;
         return;
       }
-
-      const targetBounds = introTargetElement.getBoundingClientRect();
-      const introDestination = {
-        x:
-          targetBounds.left +
-          targetBounds.width * CTA_CURSOR_HORIZONTAL_POSITION,
-        y: targetBounds.bottom - CTA_CURSOR_VERTICAL_OFFSET_PX,
-      };
 
       const introStartPosition = {
         x: Math.max(48, introDestination.x - Math.min(340, window.innerWidth * 0.28)),
@@ -263,6 +280,53 @@ export function BlueCursorFollower({
       renderScene();
     };
 
+    const refreshIntroTargetDuringViewportChanges = () => {
+      const introDestination = getCurrentIntroDestination();
+
+      if (!introDestination) {
+        return;
+      }
+
+      targetPosition.current = introDestination;
+
+      if (modeRef.current === "introPointing") {
+        cursorPosition.current = introDestination;
+        cursorRotationDegrees.current = DESKTOP_CURSOR_ROTATION_DEGREES;
+        cursorScale.current = 1;
+        renderScene();
+        return;
+      }
+
+      if (modeRef.current !== "introNavigating" || !introFlight.current) {
+        return;
+      }
+
+      const currentCursorPosition = { ...cursorPosition.current };
+      const remainingDistance = Math.hypot(
+        introDestination.x - currentCursorPosition.x,
+        introDestination.y - currentCursorPosition.y
+      );
+      const updatedArcHeight = Math.min(remainingDistance * 0.2, 80);
+
+      introFlight.current = {
+        controlPoint: {
+          x: (currentCursorPosition.x + introDestination.x) / 2,
+          y:
+            (currentCursorPosition.y + introDestination.y) / 2 -
+            updatedArcHeight,
+        },
+        durationMs: Math.min(
+          Math.max((remainingDistance / 800) * 1000, 320),
+          900
+        ),
+        endPosition: introDestination,
+        startPosition: currentCursorPosition,
+        startedAtMs: performance.now(),
+      };
+
+      renderScene();
+    };
+
     const transitionToMouseFollowing = (
       event?: MouseEvent
     ) => {
@@ -289,17 +353,13 @@ export function BlueCursorFollower({
       renderScene();
     };
 
-    const cancelIntroWithoutMouseTarget = (_event: Event) => {
-      transitionToMouseFollowing();
-    };
-
     const handleMouseMove = (event: MouseEvent) => {
       const nextMouseTargetPosition = {
         x: event.clientX + CURSOR_TRACKING_OFFSET_X,
         y: event.clientY + CURSOR_TRACKING_OFFSET_Y,
       };
 
-      if (!introHasCompleted.current) {
+      if (!introHasCompleted.current && browserSupportsFinePointer) {
         latestMouseTargetDuringIntro.current = nextMouseTargetPosition;
         return;
       }
@@ -313,6 +373,12 @@ export function BlueCursorFollower({
       hasReceivedMousePosition.current = true;
       isVisible.current = true;
       renderScene();
+    };
+
+    const handleViewportChange = () => {
+      if (!introHasCompleted.current || modeRef.current === "introPointing") {
+        refreshIntroTargetDuringViewportChanges();
+      }
     };
 
     const hideCursor = () => {
@@ -447,7 +513,10 @@ export function BlueCursorFollower({
     };
 
     introStartTimeoutId.current = window.setTimeout(() => {
-      if (hasReceivedMousePosition.current || hasCancelledIntro.current) {
+      if (
+        (browserSupportsFinePointer && hasReceivedMousePosition.current) ||
+        hasCancelledIntro.current
+      ) {
         introHasCompleted.current = true;
         return;
       }
@@ -456,13 +525,10 @@ export function BlueCursorFollower({
     }, INTRO_START_DELAY_MS);
 
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
-    window.addEventListener("mousedown", cancelIntroWithoutMouseTarget, {
+    window.addEventListener("scroll", handleViewportChange, {
       passive: true,
     });
-    window.addEventListener("scroll", cancelIntroWithoutMouseTarget, {
-      passive: true,
-    });
-    window.addEventListener("keydown", cancelIntroWithoutMouseTarget);
+    window.addEventListener("resize", handleViewportChange);
     window.addEventListener("blur", hideCursor);
     document.documentElement.addEventListener("mouseleave", hideCursor);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -472,9 +538,8 @@ export function BlueCursorFollower({
     return () => {
       clearPendingIntroWork();
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mousedown", cancelIntroWithoutMouseTarget);
-      window.removeEventListener("scroll", cancelIntroWithoutMouseTarget);
-      window.removeEventListener("keydown", cancelIntroWithoutMouseTarget);
+      window.removeEventListener("scroll", handleViewportChange);
+      window.removeEventListener("resize", handleViewportChange);
       window.removeEventListener("blur", hideCursor);
       document.documentElement.removeEventListener("mouseleave", hideCursor);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
