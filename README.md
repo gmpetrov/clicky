@@ -15,7 +15,7 @@ The repo now includes:
 - PostgreSQL + Prisma for auth and subscription data
 - Better Auth for email/password auth, optional Google auth, bearer tokens, and device login
 - Stripe billing using the existing Starter monthly plan
-- Optional Meta Pixel tracking for web page views plus sign-up and checkout funnel events
+- Optional Meta Pixel tracking for web page views plus sign-up, checkout, and purchase events
 - A Cloudflare Worker that proxies OpenRouter, ElevenLabs, and AssemblyAI after validating the desktop bearer token and active subscription
 - Usage metering that writes per-call AI cost events and billing-period summaries into PostgreSQL for future dashboard/reporting work
 

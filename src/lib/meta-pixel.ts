@@ -18,6 +18,14 @@ type MetaCheckoutOptions = MetaIdentityOptions & {
   value?: number;
 };
 
+type MetaPurchaseOptions = MetaIdentityOptions & {
+  currency?: string;
+  orderId?: string;
+  planName?: string;
+  transactionId?: string;
+  value?: number;
+};
+
 type MetaPixelFunction = {
   (
     command: "init",
@@ -118,7 +126,22 @@ function trackMetaEvent(
   }
 
   ensureMetaPixelInitialized(identityOptions);
-  window.fbq?.("track", eventName, hasObjectKeys(eventOptions) ? eventOptions : undefined);
+  const normalizedEventOptions = { ...eventOptions };
+  const transactionId = normalizedEventOptions.transaction_id;
+
+  if (
+    typeof transactionId === "string" &&
+    transactionId.length > 0 &&
+    !normalizedEventOptions.order_id
+  ) {
+    normalizedEventOptions.order_id = transactionId;
+  }
+
+  window.fbq?.(
+    "track",
+    eventName,
+    hasObjectKeys(normalizedEventOptions) ? normalizedEventOptions : undefined,
+  );
 }
 
 export function pageView(identityOptions: MetaIdentityOptions = {}) {
@@ -159,4 +182,39 @@ export function initiateCheckout(
   }
 
   trackMetaEvent("InitiateCheckout", eventOptions, identityOptions);
+}
+
+export function purchase(
+  purchaseOptions: MetaPurchaseOptions = {},
+) {
+  const {
+    currency = "USD",
+    orderId,
+    planName,
+    transactionId,
+    value,
+    ...identityOptions
+  } = purchaseOptions;
+
+  const eventOptions: Record<string, unknown> = {
+    currency,
+  };
+
+  if (planName) {
+    eventOptions.content_name = planName;
+  }
+
+  if (orderId) {
+    eventOptions.order_id = orderId;
+  }
+
+  if (transactionId) {
+    eventOptions.transaction_id = transactionId;
+  }
+
+  if (typeof value === "number") {
+    eventOptions.value = value;
+  }
+
+  trackMetaEvent("Purchase", eventOptions, identityOptions);
 }

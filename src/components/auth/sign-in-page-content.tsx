@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
@@ -9,35 +8,55 @@ import { publicEnv } from "@/lib/public-env";
 
 type SignInPageContentProps = {
   callbackURL: string;
+  initialErrorMessage: string | null;
 };
 
-export function SignInPageContent({ callbackURL }: SignInPageContentProps) {
-  const router = useRouter();
+type RequestEmailLinkResponse = {
+  errorMessage?: string;
+};
+
+export function SignInPageContent({
+  callbackURL,
+  initialErrorMessage,
+}: SignInPageContentProps) {
   const [emailAddress, setEmailAddress] = useState("");
-  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    initialErrorMessage,
+  );
+  const [submittedEmailAddress, setSubmittedEmailAddress] = useState<
+    string | null
+  >(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const { error } = await authClient.signIn.email({
-      email: emailAddress,
-      password,
-      callbackURL,
+    const response = await fetch("/api/auth/request-email-link", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        email: emailAddress,
+        callbackURL,
+        flowType: "sign-in",
+      }),
     });
+    const responseBody =
+      ((await response.json()) as RequestEmailLinkResponse) ?? {};
 
-    setIsSubmitting(false);
-
-    if (error) {
-      setErrorMessage(error.message ?? "Unable to sign in right now.");
+    if (!response.ok) {
+      setErrorMessage(
+        responseBody.errorMessage ?? "Unable to send a sign-in link right now.",
+      );
+      setIsSubmitting(false);
       return;
     }
 
-    router.push(callbackURL);
-    router.refresh();
+    setSubmittedEmailAddress(emailAddress.trim());
+    setIsSubmitting(false);
   }
 
   async function handleGoogleSignIn() {
@@ -59,7 +78,19 @@ export function SignInPageContent({ callbackURL }: SignInPageContentProps) {
   return (
     <main className="centered-page">
       <section className="auth-panel">
-        <h1>Sign in</h1>
+        <h1>{submittedEmailAddress ? "Check your email" : "Sign in"}</h1>
+
+        {submittedEmailAddress ? (
+          <p className="auth-copy">
+            We sent a secure sign-in link to{" "}
+            <strong>{submittedEmailAddress}</strong>. Open it on this device to
+            finish signing in.
+          </p>
+        ) : (
+          <p className="auth-copy">
+            Enter your email and we&apos;ll send you a secure sign-in link.
+          </p>
+        )}
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label className="auth-label">
@@ -67,7 +98,11 @@ export function SignInPageContent({ callbackURL }: SignInPageContentProps) {
             <input
               className="auth-input"
               value={emailAddress}
-              onChange={(event) => setEmailAddress(event.target.value)}
+              onChange={(event) => {
+                setEmailAddress(event.target.value);
+                setErrorMessage(null);
+                setSubmittedEmailAddress(null);
+              }}
               type="email"
               autoComplete="email"
               placeholder="you@example.com"
@@ -75,23 +110,18 @@ export function SignInPageContent({ callbackURL }: SignInPageContentProps) {
             />
           </label>
 
-          <label className="auth-label">
-            Password
-            <input
-              className="auth-input"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
-              required
-            />
-          </label>
-
           {errorMessage ? <p className="auth-error">{errorMessage}</p> : null}
 
-          <button className="primary-button auth-button" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Signing in..." : "Sign in"}
+          <button
+            className="primary-button auth-button"
+            disabled={isSubmitting}
+            type="submit"
+          >
+            {isSubmitting
+              ? "Sending sign-in link..."
+              : submittedEmailAddress
+                ? "Send another link"
+                : "Email me a sign-in link"}
           </button>
         </form>
 
@@ -100,7 +130,12 @@ export function SignInPageContent({ callbackURL }: SignInPageContentProps) {
             <div className="auth-divider">
               <span>or</span>
             </div>
-            <button className="secondary-button auth-button" disabled={isSubmitting} onClick={handleGoogleSignIn} type="button">
+            <button
+              className="secondary-button auth-button"
+              disabled={isSubmitting}
+              onClick={handleGoogleSignIn}
+              type="button"
+            >
               Continue with Google
             </button>
           </>

@@ -13,8 +13,9 @@ What it does:
 5. Creates a ready-to-upload `.dmg` for direct website distribution
 6. Also packages a secondary `.zip`
 7. Writes SHA256 checksum files next to each artifact
+8. Optionally uploads the generated artifacts to Cloudflare R2/S3
 
-The script does not upload to S3. It leaves ready-to-upload files in `build/release/artifacts`.
+By default the script leaves ready-to-upload files in `build/release/artifacts`. If you pass `--publish-s3`, it uploads those files after the build succeeds.
 
 ### Quick start
 
@@ -23,6 +24,8 @@ CLICKY_WEB_BASE_URL=https://www.pointerly.xyz \
 CLICKY_WORKER_BASE_URL=https://worker.pointerly.xyz \
 ./scripts/release.sh
 ```
+
+The script also reads release-related settings from the repo root `.env` when they are not already present in your shell environment. That includes the `APP_AWS_*` values used by `--publish-s3`.
 
 ### Common examples
 
@@ -36,6 +39,11 @@ CLICKY_WORKER_BASE_URL=https://worker.pointerly.xyz \
 CLICKY_WEB_BASE_URL=https://www.pointerly.xyz \
 CLICKY_WORKER_BASE_URL=https://worker.pointerly.xyz \
 ./scripts/release.sh --notary-profile CLICKY_NOTARY
+
+# Publish the release artifacts to Cloudflare R2/S3 after the build completes
+CLICKY_WEB_BASE_URL=https://www.pointerly.xyz \
+CLICKY_WORKER_BASE_URL=https://worker.pointerly.xyz \
+./scripts/release.sh --version 1.2.0 --build 42 --publish-s3 --s3-bucket your-r2-bucket
 
 # Skip DMG creation if you only want the exported app + ZIP
 CLICKY_WEB_BASE_URL=https://www.pointerly.xyz \
@@ -56,6 +64,19 @@ CLICKY_WORKER_BASE_URL=https://worker.pointerly.xyz \
    ```bash
    brew install create-dmg
    ```
+4. If you want `--publish-s3`, install the AWS CLI:
+   ```bash
+   brew install awscli
+   ```
+5. For `--publish-s3`, provide these values either in your shell environment or in the repo root `.env`:
+   ```bash
+   APP_AWS_ACCESS_KEY="..."
+   APP_AWS_SECRET_KEY="..."
+   APP_AWS_S3_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
+   APP_AWS_S3_BUCKET="your-r2-bucket"
+   # Optional, defaults to release/macos
+   APP_AWS_S3_RELEASE_PREFIX="release/macos"
+   ```
 
 If `create-dmg` is not installed, the script falls back to a plain notarized DMG generated with macOS `hdiutil`.
 
@@ -69,4 +90,4 @@ After a successful run you will find:
 - `build/release/artifacts/Pointerly-<version>-<build>.zip.sha256`
 - `build/release/artifacts/Pointerly-<version>-<build>.txt` with release metadata
 
-For the website flow, upload the DMG and its checksum to your S3 folder. The ZIP is there as a secondary artifact if you want it.
+If you pass `--publish-s3`, the script uploads the generated artifacts and the release manifest to the configured R2/S3 destination. Otherwise, for the website flow, upload the DMG and its checksum to your S3 folder manually. The ZIP is there as a secondary artifact if you want it.

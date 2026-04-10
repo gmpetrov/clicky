@@ -3,6 +3,7 @@ import { Instrument_Sans, Space_Grotesk, Inter, Geist } from "next/font/google";
 import Link from "next/link";
 
 import "@/app/globals.css";
+import { MetaAttributionTracker } from "@/components/meta-attribution-tracker";
 import { MetaPixel } from "@/components/meta-pixel";
 import { publicEnv } from "@/lib/public-env";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ export default function RootLayout({
           </header>
           {children}
         </div>
+        <MetaAttributionTracker />
         {publicEnv.NEXT_PUBLIC_META_PIXEL_ID ? (
           <MetaPixel pixelId={publicEnv.NEXT_PUBLIC_META_PIXEL_ID} />
         ) : null}

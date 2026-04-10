@@ -2,7 +2,7 @@
 
 import { stripeClient } from "@better-auth/stripe/client";
 import { createAuthClient } from "better-auth/react";
-import { deviceAuthorizationClient } from "better-auth/client/plugins";
+import { deviceAuthorizationClient, magicLinkClient } from "better-auth/client/plugins";
 
 import { publicEnv } from "@/lib/public-env";
 
@@ -28,6 +28,7 @@ export const authClient = createAuthClient({
   baseURL: publicEnv.NEXT_PUBLIC_APP_URL,
   plugins: [
     deviceAuthorizationClient(),
+    magicLinkClient(),
     stripeClient({
       subscription: true,
     }),

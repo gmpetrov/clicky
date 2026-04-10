@@ -26,6 +26,7 @@ const serverEnvironmentSchema = z.object({
   ASSEMBLYAI_KEYTERMS_PRICE_PER_HOUR_USD: z.coerce.number().nonnegative(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  RESEND_API_KEY: z.string().startsWith("re_"),
 });
 
 export const serverEnv = serverEnvironmentSchema.parse({
@@ -53,6 +54,7 @@ export const serverEnv = serverEnvironmentSchema.parse({
     process.env.ASSEMBLYAI_KEYTERMS_PRICE_PER_HOUR_USD ?? "0.05",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
 });
 
 export const isGoogleAuthConfigured =

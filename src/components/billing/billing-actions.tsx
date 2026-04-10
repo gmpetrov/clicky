@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { authClient, clearStoredBearerToken } from "@/lib/auth-client";
+import { getMetaAttributionStripeMetadata } from "@/lib/meta-attribution";
 import { publicEnv } from "@/lib/public-env";
 import { initiateCheckout } from "@/lib/meta-pixel";
 
@@ -29,6 +30,10 @@ export function BillingActions({
     setErrorMessage(null);
     setIsLoadingCheckout(true);
 
+    const paymentSuccessURL =
+      `${publicEnv.NEXT_PUBLIC_APP_URL}/payment-success?checkout_session_id={CHECKOUT_SESSION_ID}`;
+    const pricingPageURL = `${publicEnv.NEXT_PUBLIC_APP_URL}/pricing`;
+
     initiateCheckout({
       emailAddress: authSession.data?.user?.email,
       externalUserId: authSession.data?.user?.id,
@@ -38,8 +43,9 @@ export function BillingActions({
 
     const { error } = await authClient.subscription.upgrade({
       plan: "starter",
-      successUrl: "/dashboard",
-      cancelUrl: "/pricing",
+      successUrl: paymentSuccessURL,
+      cancelUrl: pricingPageURL,
+      metadata: getMetaAttributionStripeMetadata(),
     });
 
     setIsLoadingCheckout(false);

@@ -1,10 +1,11 @@
 import { stripe as stripePlugin } from "@better-auth/stripe";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { betterAuth } from "better-auth";
-import { bearer, deviceAuthorization } from "better-auth/plugins";
+import { bearer, deviceAuthorization, magicLink } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import Stripe from "stripe";
 
+import { sendPointerlyMagicLinkEmail } from "@/lib/auth-email";
 import { prisma } from "@/lib/db";
 import { isGoogleAuthConfigured, serverEnv } from "@/lib/env";
 
@@ -33,6 +34,17 @@ export const auth = betterAuth({
   socialProviders,
   plugins: [
     bearer(),
+    magicLink({
+      sendMagicLink: async ({ email, url, metadata }) => {
+        const flowType = metadata?.flowType === "sign-up" ? "sign-up" : "sign-in";
+
+        await sendPointerlyMagicLinkEmail({
+          emailAddress: email,
+          magicLinkURL: url,
+          flowType,
+        });
+      },
+    }),
     deviceAuthorization({
       verificationUri: "/device",
       validateClient: async (clientId) => {
