@@ -2,143 +2,192 @@
 
 import { useEffect, useRef } from "react";
 
-const CURSOR_BLUE = "#3380FF";
-const SPRING_RESPONSE = 0.2;
-const SPRING_DAMPING = 0.6;
+const DESKTOP_CURSOR_BLUE = "#3380FF";
+const DESKTOP_CURSOR_SIZE_PX = 16;
+const DESKTOP_CURSOR_ROTATION_DEGREES = -35;
+const DESKTOP_CURSOR_SHADOW_BLUR_PX = 8;
+const CURSOR_TRACKING_OFFSET_X = 35;
+const CURSOR_TRACKING_OFFSET_Y = 25;
+const SPRING_RESPONSE_SECONDS = 0.2;
+const SPRING_DAMPING_FRACTION = 0.6;
+const MAX_FRAME_DELTA_SECONDS = 1 / 24;
+const REST_DISTANCE_THRESHOLD_PX = 0.01;
+const REST_VELOCITY_THRESHOLD = 0.01;
+
+const SPRING_ANGULAR_FREQUENCY =
+  (2 * Math.PI) / SPRING_RESPONSE_SECONDS;
+const SPRING_STIFFNESS = SPRING_ANGULAR_FREQUENCY ** 2;
+const SPRING_DAMPING =
+  2 * SPRING_DAMPING_FRACTION * SPRING_ANGULAR_FREQUENCY;
+
+const triangleHeight =
+  DESKTOP_CURSOR_SIZE_PX * (Math.sqrt(3) / 2);
+const triangleTopY =
+  DESKTOP_CURSOR_SIZE_PX / 2 - triangleHeight / 1.5;
+const triangleBottomY =
+  DESKTOP_CURSOR_SIZE_PX / 2 + triangleHeight / 3;
+const trianglePath = `M ${DESKTOP_CURSOR_SIZE_PX / 2} ${triangleTopY} L 0 ${triangleBottomY} L ${DESKTOP_CURSOR_SIZE_PX} ${triangleBottomY} Z`;
 
 export function BlueCursorFollower() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mousePosition = useRef({ x: -100, y: -100 });
+  const cursorElementRef = useRef<HTMLDivElement>(null);
+  const targetPosition = useRef({ x: -100, y: -100 });
   const cursorPosition = useRef({ x: -100, y: -100 });
   const cursorVelocity = useRef({ x: 0, y: 0 });
+  const hasReceivedMousePosition = useRef(false);
   const isVisible = useRef(false);
+  const animationFrameId = useRef<number | null>(null);
+  const previousFrameTimestampMs = useRef<number | null>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!window.matchMedia("(pointer: fine)").matches) {
+      return;
+    }
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const cursorElement = cursorElementRef.current;
+    if (!cursorElement) {
+      return;
+    }
 
-    let animationFrameId: number;
+    const renderCursor = () => {
+      const cursorLeft =
+        cursorPosition.current.x - DESKTOP_CURSOR_SIZE_PX / 2;
+      const cursorTop =
+        cursorPosition.current.y - DESKTOP_CURSOR_SIZE_PX / 2;
 
-    const handleResize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cursorElement.style.transform = `translate3d(${cursorLeft}px, ${cursorTop}px, 0) rotate(${DESKTOP_CURSOR_ROTATION_DEGREES}deg)`;
+      cursorElement.style.opacity = isVisible.current ? "1" : "0";
     };
-
-    handleResize();
 
     const handleMouseMove = (event: MouseEvent) => {
-      mousePosition.current = { x: event.clientX, y: event.clientY };
+      const nextTargetPosition = {
+        x: event.clientX + CURSOR_TRACKING_OFFSET_X,
+        y: event.clientY + CURSOR_TRACKING_OFFSET_Y,
+      };
+
+      targetPosition.current = nextTargetPosition;
       isVisible.current = true;
-    };
 
-    const handleMouseLeave = () => {
-      isVisible.current = false;
-    };
-
-    const drawTriangle = (x: number, y: number, rotationRadians: number) => {
-      const size = 16;
-      const height = size * (Math.sqrt(3) / 2);
-
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(rotationRadians);
-
-      ctx.shadowColor = CURSOR_BLUE;
-      ctx.shadowBlur = 20;
-
-      ctx.beginPath();
-      ctx.moveTo(0, -height * 0.67);
-      ctx.lineTo(-size / 2, height * 0.33);
-      ctx.lineTo(size / 2, height * 0.33);
-      ctx.closePath();
-
-      ctx.fillStyle = CURSOR_BLUE;
-      ctx.fill();
-
-      ctx.shadowBlur = 10;
-      ctx.fill();
-
-      ctx.shadowBlur = 0;
-
-      const innerInset = 3;
-      const innerSize = size - innerInset * 1.5;
-      const innerHeight = innerSize * (Math.sqrt(3) / 2);
-
-      ctx.beginPath();
-      ctx.moveTo(0, -innerHeight * 0.67 + 1);
-      ctx.lineTo(-innerSize / 2 + 0.5, innerHeight * 0.33 - 0.5);
-      ctx.lineTo(innerSize / 2 - 0.5, innerHeight * 0.33 - 0.5);
-      ctx.closePath();
-
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      ctx.restore();
-    };
-
-    const animate = () => {
-      const dpr = window.devicePixelRatio || 1;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-
-      const targetX = mousePosition.current.x + 28;
-      const targetY = mousePosition.current.y + 20;
-
-      const stiffness = (2 * Math.PI / SPRING_RESPONSE) ** 2;
-      const damping = 2 * SPRING_DAMPING * Math.sqrt(stiffness);
-      const dt = 1 / 60;
-
-      const forceX = stiffness * (targetX - cursorPosition.current.x);
-      const forceY = stiffness * (targetY - cursorPosition.current.y);
-      const dampX = damping * cursorVelocity.current.x;
-      const dampY = damping * cursorVelocity.current.y;
-
-      cursorVelocity.current.x += (forceX - dampX) * dt;
-      cursorVelocity.current.y += (forceY - dampY) * dt;
-      cursorPosition.current.x += cursorVelocity.current.x * dt;
-      cursorPosition.current.y += cursorVelocity.current.y * dt;
-
-      if (isVisible.current) {
-        drawTriangle(
-          cursorPosition.current.x,
-          cursorPosition.current.y,
-          -35 * (Math.PI / 180)
-        );
+      if (!hasReceivedMousePosition.current) {
+        hasReceivedMousePosition.current = true;
+        cursorPosition.current = nextTargetPosition;
+        cursorVelocity.current = { x: 0, y: 0 };
       }
 
-      animationFrameId = requestAnimationFrame(animate);
+      renderCursor();
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    document.documentElement.addEventListener("mouseleave", handleMouseLeave);
-    window.addEventListener("resize", handleResize);
-    animationFrameId = requestAnimationFrame(animate);
+    const hideCursor = () => {
+      isVisible.current = false;
+      renderCursor();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        hideCursor();
+      }
+    };
+
+    const animateCursor = (timestampMs: number) => {
+      const previousTimestampMs =
+        previousFrameTimestampMs.current ?? timestampMs;
+      const frameDeltaSeconds = Math.min(
+        (timestampMs - previousTimestampMs) / 1000,
+        MAX_FRAME_DELTA_SECONDS
+      );
+
+      previousFrameTimestampMs.current = timestampMs;
+
+      if (hasReceivedMousePosition.current) {
+        const targetDeltaX =
+          targetPosition.current.x - cursorPosition.current.x;
+        const targetDeltaY =
+          targetPosition.current.y - cursorPosition.current.y;
+
+        const accelerationX =
+          SPRING_STIFFNESS * targetDeltaX -
+          SPRING_DAMPING * cursorVelocity.current.x;
+        const accelerationY =
+          SPRING_STIFFNESS * targetDeltaY -
+          SPRING_DAMPING * cursorVelocity.current.y;
+
+        cursorVelocity.current.x += accelerationX * frameDeltaSeconds;
+        cursorVelocity.current.y += accelerationY * frameDeltaSeconds;
+        cursorPosition.current.x +=
+          cursorVelocity.current.x * frameDeltaSeconds;
+        cursorPosition.current.y +=
+          cursorVelocity.current.y * frameDeltaSeconds;
+
+        const remainingDistanceX = Math.abs(
+          targetPosition.current.x - cursorPosition.current.x
+        );
+        const remainingDistanceY = Math.abs(
+          targetPosition.current.y - cursorPosition.current.y
+        );
+        const remainingVelocityX = Math.abs(cursorVelocity.current.x);
+        const remainingVelocityY = Math.abs(cursorVelocity.current.y);
+
+        const hasSettledIntoRestPosition =
+          remainingDistanceX < REST_DISTANCE_THRESHOLD_PX &&
+          remainingDistanceY < REST_DISTANCE_THRESHOLD_PX &&
+          remainingVelocityX < REST_VELOCITY_THRESHOLD &&
+          remainingVelocityY < REST_VELOCITY_THRESHOLD;
+
+        if (hasSettledIntoRestPosition) {
+          cursorPosition.current = { ...targetPosition.current };
+          cursorVelocity.current = { x: 0, y: 0 };
+        }
+      }
+
+      renderCursor();
+      animationFrameId.current = window.requestAnimationFrame(animateCursor);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
+    document.documentElement.addEventListener("mouseleave", hideCursor);
+    window.addEventListener("blur", hideCursor);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    animationFrameId.current = window.requestAnimationFrame(animateCursor);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      document.documentElement.removeEventListener("mouseleave", handleMouseLeave);
-      window.removeEventListener("resize", handleResize);
-      cancelAnimationFrame(animationFrameId);
+      document.documentElement.removeEventListener("mouseleave", hideCursor);
+      window.removeEventListener("blur", hideCursor);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
+      if (animationFrameId.current !== null) {
+        window.cancelAnimationFrame(animationFrameId.current);
+      }
     };
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
+    <div
+      ref={cursorElementRef}
+      aria-hidden="true"
       style={{
         position: "fixed",
-        inset: 0,
+        top: 0,
+        left: 0,
+        width: `${DESKTOP_CURSOR_SIZE_PX}px`,
+        height: `${DESKTOP_CURSOR_SIZE_PX}px`,
         pointerEvents: "none",
         zIndex: 9999,
+        opacity: 0,
+        willChange: "transform, opacity",
+        transition: "opacity 180ms ease-out",
+        filter: `drop-shadow(0 0 ${DESKTOP_CURSOR_SHADOW_BLUR_PX}px ${DESKTOP_CURSOR_BLUE})`,
+        transformOrigin: "50% 50%",
       }}
-    />
+    >
+      <svg
+        width={DESKTOP_CURSOR_SIZE_PX}
+        height={DESKTOP_CURSOR_SIZE_PX}
+        viewBox={`0 0 ${DESKTOP_CURSOR_SIZE_PX} ${DESKTOP_CURSOR_SIZE_PX}`}
+        style={{ display: "block", overflow: "visible" }}
+      >
+        <path d={trianglePath} fill={DESKTOP_CURSOR_BLUE} />
+      </svg>
+    </div>
   );
 }
