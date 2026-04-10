@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Sans, Space_Grotesk, Inter, Geist } from "next/font/google";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import "@/app/globals.css";
 import { MetaAttributionTracker } from "@/components/meta-attribution-tracker";
@@ -53,10 +54,12 @@ export default function RootLayout({
           </header>
           {children}
         </div>
-        <MetaAttributionTracker />
-        {publicEnv.NEXT_PUBLIC_META_PIXEL_ID ? (
-          <MetaPixel pixelId={publicEnv.NEXT_PUBLIC_META_PIXEL_ID} />
-        ) : null}
+        <Suspense fallback={null}>
+          <MetaAttributionTracker />
+          {publicEnv.NEXT_PUBLIC_META_PIXEL_ID ? (
+            <MetaPixel pixelId={publicEnv.NEXT_PUBLIC_META_PIXEL_ID} />
+          ) : null}
+        </Suspense>
       </body>
     </html>
   );
